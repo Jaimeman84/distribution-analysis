@@ -21,7 +21,7 @@ This application helps pharmacies forecast the workload for processing PDFs from
 - **Input Validation**: Auto-corrects invalid inputs and prevents common errors
 - **Statistical Analysis**: Provides mean, median (P50), P90, and P95 estimates
 - **Visual Distributions**: Interactive charts showing PDF volume and processing time distributions
-- **Override Capability**: Optionally override the scanned PDF ratio for different scenarios
+- **Beta-Binomial Modeling**: Accounts for carrier-to-carrier variation in scanned PDF ratios
 - **Data Export**: Download raw simulation data as CSV
 
 ## How to Run This Application
@@ -101,10 +101,14 @@ The application uses a two-stage Monte Carlo simulation:
    - Calculates λ (lambda) = Total PDFs / Cases from Carrier A
    - Samples total PDFs for Carrier X using Poisson distribution with λ
 
-2. **PDF Type Distribution**:
-   - Calculates p_scanned = Scanned PDFs / Total PDFs from Carrier A
-   - Samples scanned PDFs using Binomial distribution (n=total_pdfs, p=p_scanned)
+2. **PDF Type Distribution (Beta-Binomial)**:
+   - Estimates Beta distribution parameters from Carrier A data:
+     - α (alpha) = Scanned PDFs + 1
+     - β (beta) = Machine-readable PDFs + 1
+   - For each simulation, samples a scanned ratio from Beta(α, β)
+   - Then samples scanned PDFs using Binomial(n=total_pdfs, p=sampled_ratio)
    - Machine PDFs = Total PDFs - Scanned PDFs
+   - **Why Beta-Binomial?** Accounts for carrier-to-carrier variation in scanning practices
 
 3. **Processing Time**:
    - Total time = (Machine PDFs × Machine time) + (Scanned PDFs × Scanned time)
@@ -112,9 +116,12 @@ The application uses a two-stage Monte Carlo simulation:
 ### Assumptions
 
 - **PDFs per case** follow a Poisson distribution (appropriate for count data)
-- **Scanned vs. machine-readable ratio** follows a Binomial distribution
+- **Scanned vs. machine-readable ratio** follows a **Beta-Binomial distribution**
+  - Reflects that different carriers may have different scanning practices
+  - More realistic uncertainty than fixed ratio assumption
+  - Automatically accounts for sample size (larger Carrier A sample = tighter estimates)
 - **Processing times** are deterministic averages per PDF type
-- **Carrier similarity**: Other carriers have similar PDF distributions to Carrier A (unless overridden)
+- **Carrier variation**: Each carrier may have a different scanned ratio (modeled via Beta distribution)
 
 ### Validation & Error Handling
 

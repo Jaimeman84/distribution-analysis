@@ -83,10 +83,16 @@ def simulate_forecast(
     avg_time_machine_seconds: float,
     avg_time_scanned_seconds: float,
     simulations: int = 5000,
-    random_seed: int = 42
+    random_seed: int = 42,
+    use_beta_binomial: bool = True,
+    carrierA_scanned: int = None,
+    carrierA_machine: int = None
 ) -> Dict[str, np.ndarray]:
     """
     Run Monte Carlo simulation for Carrier X forecasting.
+
+    Uses Beta-Binomial distribution to model carrier-to-carrier variation
+    in scanned PDF ratios, providing more realistic uncertainty estimates.
 
     Returns:
         Dictionary containing arrays of simulated values:
@@ -104,12 +110,32 @@ def simulate_forecast(
     if expected_pdfs > 1_000_000:
         st.warning(f"⚠️ Expected PDFs is very large ({expected_pdfs:,.0f}). Results may be approximate.")
 
-    # Monte Carlo simulation
+    # Monte Carlo simulation - Step 1: Sample total PDFs
     total_pdfs = np.random.poisson(lam=expected_pdfs, size=simulations)
-    scanned_pdfs = np.array([
-        np.random.binomial(n=n, p=p_scanned) if n > 0 else 0
-        for n in total_pdfs
-    ])
+
+    # Step 2: Sample scanned PDFs using Beta-Binomial distribution
+    if use_beta_binomial and carrierA_scanned is not None and carrierA_machine is not None:
+        # Beta-Binomial: Models carrier-to-carrier variation in scanned ratio
+        # Each carrier may have a slightly different scanned PDF ratio
+        alpha = carrierA_scanned + 1  # Beta distribution parameter
+        beta = carrierA_machine + 1    # Beta distribution parameter
+
+        # Sample a different scanned ratio for each simulation
+        # This reflects uncertainty about Carrier X's actual ratio
+        p_scanned_samples = np.random.beta(alpha, beta, size=simulations)
+
+        scanned_pdfs = np.array([
+            np.random.binomial(n=total_pdfs[i], p=p_scanned_samples[i])
+            if total_pdfs[i] > 0 else 0
+            for i in range(simulations)
+        ])
+    else:
+        # Fallback: Original Binomial approach (fixed ratio)
+        scanned_pdfs = np.array([
+            np.random.binomial(n=n, p=p_scanned) if n > 0 else 0
+            for n in total_pdfs
+        ])
+
     machine_pdfs = total_pdfs - scanned_pdfs
 
     # Calculate processing times
@@ -159,7 +185,9 @@ def main():
     **Assumptions**:
     - Carrier A is used as the benchmark for all calculations
     - PDFs per case are modeled using a Poisson distribution
-    - Scanned vs. machine-readable ratio is modeled using a Binomial distribution
+    - Scanned vs. machine-readable ratio is modeled using a **Beta-Binomial distribution**
+      - Accounts for carrier-to-carrier variation in scanning practices
+      - Provides more realistic uncertainty estimates for different carriers
     - Processing times are deterministic per PDF type
     """)
 
@@ -251,24 +279,8 @@ def main():
         corrected_scanned
     )
 
-    # Optional override for scanned ratio
-    use_override = st.sidebar.checkbox(
-        "Override Scanned PDF Ratio",
-        value=False,
-        help="Override the scanned ratio from Carrier A"
-    )
-
+    # Use scanned ratio from Carrier A benchmark
     p_scanned = metrics["p_scanned"]
-    if use_override:
-        p_scanned = st.sidebar.slider(
-            "Scanned PDF Ratio",
-            min_value=0.0,
-            max_value=1.0,
-            value=float(metrics["p_scanned"]),
-            step=0.01,
-            format="%.2f",
-            help="Proportion of PDFs that are scanned (0 = all machine-readable, 1 = all scanned)"
-        )
 
     simulations = st.sidebar.number_input(
         "Number of Simulations",
@@ -290,7 +302,10 @@ def main():
             p_scanned=p_scanned,
             avg_time_machine_seconds=avg_time_machine_seconds,
             avg_time_scanned_seconds=avg_time_scanned_seconds,
-            simulations=simulations
+            simulations=simulations,
+            use_beta_binomial=True,
+            carrierA_scanned=corrected_scanned,
+            carrierA_machine=corrected_machine
         )
 
     # Compute statistics
@@ -308,9 +323,8 @@ def main():
 
     with col2:
         st.metric(
-            "Scanned Ratio",
-            f"{p_scanned:.1%}",
-            delta="Overridden" if use_override else None
+            "Scanned Ratio (from Carrier A)",
+            f"{p_scanned:.1%}"
         )
 
     with col3:
@@ -445,7 +459,6 @@ How to Run This Application
 4. Usage:
    - Enter Carrier A benchmark data in the left sidebar
    - Enter the number of cases for Carrier X
-   - Optionally override the scanned PDF ratio
    - Adjust number of simulations for accuracy vs. speed
    - View results, statistics, and distributions in the main panel
 
@@ -454,9 +467,11 @@ Technical Notes
 
 Model Assumptions:
 - PDFs per case follow a Poisson distribution with λ = (Carrier A total PDFs / Carrier A cases)
-- PDF type (scanned vs. machine-readable) follows a Binomial distribution
+- PDF type (scanned vs. machine-readable) follows a Beta-Binomial distribution
+  (accounts for carrier-to-carrier variation in scanning practices)
+- Scanned ratio is calculated from Carrier A benchmark data
 - Processing times are deterministic averages per PDF type
-- All carriers have similar PDF distributions unless overridden
+- Carrier X may have different scanned ratios than Carrier A (modeled via Beta distribution)
 
 Validation:
 - Prevents division by zero when Carrier A cases = 0
