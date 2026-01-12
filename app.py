@@ -640,7 +640,7 @@ def main():
 
         # Display summary metrics
         st.subheader("📈 Summary Metrics")
-        col1, col2, col3, col4 = st.columns(4)
+        col1, col2, col3, col4, col5 = st.columns(5)
 
         with col1:
             st.metric(
@@ -666,6 +666,15 @@ def main():
             st.metric(
                 "Est. Total Processing Time",
                 format_time_hours(total_time)
+            )
+
+        with col5:
+            total_time = (results_df['_machine_time_p50'].sum() +
+                         results_df['_scanned_time_p50'].sum())
+            total_days = total_time / 86400  # seconds to days
+            st.metric(
+                "Est. Processing Time (Days)",
+                f"{total_days:.2f} days"
             )
 
         # Display bucketed summary table
