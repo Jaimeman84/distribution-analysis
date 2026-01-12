@@ -15,14 +15,22 @@ This application helps pharmacies forecast the workload for processing PDFs from
 
 ## Features
 
+### Analysis Modes
+
+- **Single Carrier Mode**: Detailed forecasting for one specific carrier with full statistical distributions
+- **Multi-Carrier Analysis**: Batch process multiple carriers from a spreadsheet upload
+
+### Core Features
+
 - **Benchmark-Based Forecasting**: Use Carrier A data to predict outcomes for any carrier
 - **Monte Carlo Simulation**: Run thousands of simulations for robust statistical estimates
 - **Dual PDF Types**: Handles both machine-readable PDFs (fast) and scanned PDFs (slower, OCR required)
 - **Input Validation**: Auto-corrects invalid inputs and prevents common errors
-- **Statistical Analysis**: Provides mean, median (P50), P90, and P95 estimates
-- **Visual Distributions**: Interactive charts showing PDF volume and processing time distributions
+- **Statistical Analysis**: Provides P10-P90 ranges and median (P50) estimates
+- **Visual Distributions**: Interactive charts showing PDF volume and processing time distributions (single carrier mode)
 - **Override Capability**: Optionally override the scanned PDF ratio for different scenarios
-- **Data Export**: Download raw simulation data as CSV
+- **Batch Processing**: Upload CSV/Excel files with multiple carriers for comprehensive analysis
+- **Data Export**: Download results as CSV or Excel with formatted tables
 
 ## How to Run This Application
 
@@ -59,6 +67,7 @@ The application will automatically open in your default browser at `http://local
 
 #### Carrier A Benchmark Data (Sidebar)
 
+Required for both modes:
 1. **Number of Cases**: Total cases processed for Carrier A
 2. **Total PDFs**: Total number of PDFs across all cases
 3. **Machine-Readable PDFs**: Number of PDFs that don't require OCR
@@ -66,13 +75,23 @@ The application will automatically open in your default browser at `http://local
 5. **Avg Processing Time - Machine PDF**: Average seconds to process one machine-readable PDF
 6. **Avg Processing Time - Scanned PDF**: Average seconds to process one scanned PDF (typically higher)
 
-#### Carrier X Forecast (Sidebar)
+#### Single Carrier Mode
 
 7. **Number of Cases (Carrier X)**: Number of cases for the carrier you want to forecast
 8. **Override Scanned PDF Ratio** *(optional)*: Check to manually set a different scanned ratio
 9. **Number of Simulations**: More simulations = more accurate (default: 5,000)
 
-### Example Scenario
+#### Multi-Carrier Analysis Mode
+
+7. **Upload Carrier Data**: CSV or Excel file with two columns:
+   - `Carrier ID`: Text identifier for each carrier
+   - `Cases`: Number of cases per carrier
+8. **Override Scanned PDF Ratio** *(optional)*: Check to manually set a different scanned ratio
+9. **Number of Simulations**: Simulations per carrier (default: 1,000 for performance)
+
+### Example Scenarios
+
+#### Single Carrier Example
 
 **Benchmark Data (Carrier A)**:
 - Cases: 100
@@ -90,6 +109,27 @@ The application will automatically open in your default browser at `http://local
 - Estimated scanned: ~225 (30% scanned ratio)
 - Estimated machine: ~525
 - Processing time: ~3.0 hours
+
+#### Multi-Carrier Example
+
+**Benchmark Data (Carrier A)**: Same as above
+
+**Upload File** (`carriers.csv`):
+```csv
+Carrier ID,Cases
+Carrier B,150
+Carrier C,80
+Carrier D,200
+Carrier E,120
+```
+
+**Expected Output Table**:
+| Carrier ID | Cases | PDF Range (P10-P90) | Machine PDF Range | Scanned PDF Range | Machine Time Range | Scanned Time Range |
+|------------|-------|---------------------|-------------------|-------------------|-------------------|-------------------|
+| Carrier B  | 150   | 720-780            | 504-546          | 216-234          | 17.0-18.2 min     | 28.8-31.2 min     |
+| Carrier C  | 80    | 384-416            | 269-291          | 115-125          | 9.0-9.7 min       | 15.3-16.7 min     |
+| Carrier D  | 200   | 960-1040           | 672-728          | 288-312          | 22.4-24.3 min     | 38.4-41.6 min     |
+| Carrier E  | 120   | 576-624            | 403-437          | 173-187          | 13.4-14.6 min     | 23.1-25.0 min     |
 
 ## Technical Notes
 
@@ -143,9 +183,10 @@ The application uses a two-stage Monte Carlo simulation:
 
 ```
 distribution-analyzer/
-├── app.py              # Main Streamlit application
-├── requirements.txt    # Python dependencies
-└── README.md          # This file
+├── app.py                  # Main Streamlit application
+├── requirements.txt        # Python dependencies
+├── sample_carriers.csv     # Sample multi-carrier data file
+└── README.md              # This file
 ```
 
 ## Functions Reference
@@ -154,7 +195,8 @@ distribution-analyzer/
 
 - `validate_benchmark_inputs()`: Validates and auto-corrects benchmark inputs
 - `compute_benchmark_metrics()`: Calculates λ and probability distributions from Carrier A
-- `simulate_forecast()`: Runs Monte Carlo simulation for Carrier X
+- `simulate_forecast()`: Runs Monte Carlo simulation for a single carrier
+- `batch_simulate_carriers()`: Runs batch simulations for multiple carriers
 - `compute_statistics()`: Calculates mean and percentiles
 - `format_time_hours()`: Converts seconds to human-readable format
 
@@ -171,8 +213,14 @@ distribution-analyzer/
 **Issue**: Very large expected PDFs warning
 - **Solution**: Double-check your inputs; the forecast may be correct for large-scale operations
 
-**Issue**: Slow performance
-- **Solution**: Reduce the number of simulations (1,000-2,000 is often sufficient)
+**Issue**: Slow performance with multi-carrier analysis
+- **Solution**: Reduce the number of simulations (500-1,000 per carrier is sufficient for batch processing)
+
+**Issue**: "File must contain columns: Carrier ID, Cases"
+- **Solution**: Ensure your CSV/Excel file has exactly these two column headers (case-sensitive)
+
+**Issue**: Excel export not working
+- **Solution**: Make sure openpyxl is installed: `pip install openpyxl>=3.1.0`
 
 ## Contributing
 
