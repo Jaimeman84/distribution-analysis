@@ -734,6 +734,30 @@ def main():
             use_container_width=True
         )
 
+        # Export bucketed summary
+        col1, col2 = st.columns(2)
+        with col1:
+            bucket_csv = bucket_summary_df.to_csv(index=False)
+            st.download_button(
+                label="📥 Download Bucketed Summary (CSV)",
+                data=bucket_csv,
+                file_name="bucketed_summary.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
+        with col2:
+            bucket_buffer = io.BytesIO()
+            with pd.ExcelWriter(bucket_buffer, engine='openpyxl') as writer:
+                bucket_summary_df.to_excel(writer, index=False, sheet_name='Bucketed Summary')
+            bucket_buffer.seek(0)
+            st.download_button(
+                label="📥 Download Bucketed Summary (Excel)",
+                data=bucket_buffer,
+                file_name="bucketed_summary.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True
+            )
+
         # Display detailed table
         st.markdown("---")
         st.subheader("📋 Detailed Carrier Analysis Table")
@@ -749,18 +773,15 @@ def main():
             height=400
         )
 
-        # Export functionality
-        st.markdown("---")
-        st.subheader("💾 Export Results")
-
+        # Export detailed carrier analysis
         col1, col2 = st.columns(2)
 
         with col1:
             csv = display_df.to_csv(index=False)
             st.download_button(
-                label="📥 Download as CSV",
+                label="📥 Download Detailed Analysis (CSV)",
                 data=csv,
-                file_name="multi_carrier_analysis.csv",
+                file_name="detailed_carrier_analysis.csv",
                 mime="text/csv",
                 use_container_width=True
             )
@@ -769,13 +790,13 @@ def main():
             # Create Excel file in memory
             buffer = io.BytesIO()
             with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-                display_df.to_excel(writer, index=False, sheet_name='Carrier Analysis')
+                display_df.to_excel(writer, index=False, sheet_name='Detailed Analysis')
             buffer.seek(0)
 
             st.download_button(
-                label="📥 Download as Excel",
+                label="📥 Download Detailed Analysis (Excel)",
                 data=buffer,
-                file_name="multi_carrier_analysis.xlsx",
+                file_name="detailed_carrier_analysis.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True
             )
