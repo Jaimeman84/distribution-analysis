@@ -47,7 +47,29 @@ git clone <repository-url>
 cd distribution-analyzer
 ```
 
-2. Install dependencies:
+2. Create a Python virtual environment:
+```bash
+python -m venv venv
+```
+
+3. Activate the virtual environment:
+
+**Windows (Command Prompt):**
+```bash
+venv\Scripts\activate
+```
+
+**Windows (PowerShell):**
+```bash
+.\venv\Scripts\Activate.ps1
+```
+
+**macOS/Linux:**
+```bash
+source venv/bin/activate
+```
+
+4. Install dependencies:
 ```bash
 pip install -r requirements.txt
 ```
@@ -56,12 +78,19 @@ pip install -r requirements.txt
 
 ### Running the Application
 
-Start the Streamlit app:
+Make sure your virtual environment is activated, then start the Streamlit app:
 ```bash
 streamlit run app.py
 ```
 
 The application will automatically open in your default browser at `http://localhost:8501`
+
+To stop the application, press `Ctrl+C` in the terminal.
+
+To deactivate the virtual environment when done:
+```bash
+deactivate
+```
 
 ### Input Parameters
 
