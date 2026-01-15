@@ -262,6 +262,177 @@ def compute_statistics(data: np.ndarray) -> Dict[str, float]:
     }
 
 
+def assign_carriers_to_tiers(
+    num_carriers: int,
+    tier_low_pct: int,
+    tier_same_pct: int,
+    tier_high_pct: int,
+    random_seed: int = 42
+) -> List[str]:
+    """
+    Randomly assign carriers to volume tiers based on percentages.
+
+    Args:
+        num_carriers: Total number of carriers to assign
+        tier_low_pct: Percentage of carriers for Low tier (0.5x)
+        tier_same_pct: Percentage of carriers for Same tier (1.0x)
+        tier_high_pct: Percentage of carriers for High tier (1.5x)
+        random_seed: Seed for reproducibility
+
+    Returns:
+        List of tier assignments ('Low', 'Same', 'High') for each carrier
+    """
+    np.random.seed(random_seed)
+
+    # Calculate number of carriers per tier
+    num_low = int(num_carriers * tier_low_pct / 100)
+    num_same = int(num_carriers * tier_same_pct / 100)
+    num_high = num_carriers - num_low - num_same  # Remainder goes to high
+
+    # Create tier assignments
+    tiers = ['Low'] * num_low + ['Same'] * num_same + ['High'] * num_high
+
+    # Shuffle randomly
+    np.random.shuffle(tiers)
+
+    return tiers
+
+
+def batch_simulate_carriers_with_scenarios(
+    carriers_df: pd.DataFrame,
+    lambda_pdfs_per_case: float,
+    p_scanned: float,
+    avg_time_machine_seconds: float,
+    avg_time_scanned_seconds: float,
+    tier_assignments: List[str],
+    simulations: int = 1000,
+    random_seed: int = 42
+) -> pd.DataFrame:
+    """
+    Run Monte Carlo simulation for multiple carriers with tier-based scenario multipliers.
+
+    Args:
+        carriers_df: DataFrame with columns ['Carrier ID', 'Cases']
+        lambda_pdfs_per_case: Base PDFs per case from Carrier A benchmark
+        p_scanned: Probability a PDF is scanned
+        avg_time_machine_seconds: Average processing time for machine-readable PDF
+        avg_time_scanned_seconds: Average processing time for scanned PDF
+        tier_assignments: List of tier assignments ('Low', 'Same', 'High') for each carrier
+        simulations: Number of Monte Carlo simulations per carrier (0 = deterministic)
+        random_seed: Seed for reproducibility
+
+    Returns:
+        DataFrame with carrier analysis including tier assignment and adjusted metrics
+    """
+    # Tier multipliers
+    tier_multipliers = {
+        'Low': 0.5,
+        'Same': 1.0,
+        'High': 1.5
+    }
+
+    results = []
+
+    for idx, row in carriers_df.iterrows():
+        carrier_id = row['Carrier ID']
+        cases = int(row['Cases'])
+        tier = tier_assignments[idx] if idx < len(tier_assignments) else 'Same'
+        multiplier = tier_multipliers[tier]
+
+        # Apply multiplier to lambda
+        adjusted_lambda = lambda_pdfs_per_case * multiplier
+
+        if cases <= 0:
+            continue
+
+        if simulations == 0:
+            # Deterministic calculation
+            total_pdfs = cases * adjusted_lambda
+            machine_pdfs = total_pdfs * (1 - p_scanned)
+            scanned_pdfs = total_pdfs * p_scanned
+            machine_time_seconds = machine_pdfs * avg_time_machine_seconds
+            scanned_time_seconds = scanned_pdfs * avg_time_scanned_seconds
+
+            results.append({
+                "Carrier ID": carrier_id,
+                "Cases": cases,
+                "Tier": f"{tier} ({multiplier}x)",
+                "Total PDFs": f"{total_pdfs:.0f}",
+                "Machine PDFs": f"{machine_pdfs:.0f}",
+                "Scanned PDFs": f"{scanned_pdfs:.0f}",
+                "Machine Processing Time": f"{format_time_hours(machine_time_seconds)}",
+                "Scanned Processing Time": f"{format_time_hours(scanned_time_seconds)}",
+                # Store numeric values for sorting and aggregation
+                "_cases": cases,
+                "_tier": tier,
+                "_multiplier": multiplier,
+                "_total_pdfs_p50": total_pdfs,
+                "_machine_pdfs_p50": machine_pdfs,
+                "_scanned_pdfs_p50": scanned_pdfs,
+                "_machine_time_p50": machine_time_seconds,
+                "_scanned_time_p50": scanned_time_seconds
+            })
+        else:
+            # Run simulation for this carrier with adjusted lambda
+            sim_results = simulate_forecast(
+                carrierX_cases=cases,
+                lambda_pdfs_per_case=adjusted_lambda,
+                p_scanned=p_scanned,
+                avg_time_machine_seconds=avg_time_machine_seconds,
+                avg_time_scanned_seconds=avg_time_scanned_seconds,
+                simulations=simulations,
+                random_seed=random_seed + idx
+            )
+
+            # Calculate statistics (P10, P50, P90)
+            total_pdfs_p10 = np.percentile(sim_results["total_pdfs"], 10)
+            total_pdfs_p50 = np.percentile(sim_results["total_pdfs"], 50)
+            total_pdfs_p90 = np.percentile(sim_results["total_pdfs"], 90)
+
+            machine_pdfs_p10 = np.percentile(sim_results["machine_pdfs"], 10)
+            machine_pdfs_p50 = np.percentile(sim_results["machine_pdfs"], 50)
+            machine_pdfs_p90 = np.percentile(sim_results["machine_pdfs"], 90)
+
+            scanned_pdfs_p10 = np.percentile(sim_results["scanned_pdfs"], 10)
+            scanned_pdfs_p50 = np.percentile(sim_results["scanned_pdfs"], 50)
+            scanned_pdfs_p90 = np.percentile(sim_results["scanned_pdfs"], 90)
+
+            machine_time_seconds_p10 = machine_pdfs_p10 * avg_time_machine_seconds
+            machine_time_seconds_p50 = machine_pdfs_p50 * avg_time_machine_seconds
+            machine_time_seconds_p90 = machine_pdfs_p90 * avg_time_machine_seconds
+
+            scanned_time_seconds_p10 = scanned_pdfs_p10 * avg_time_scanned_seconds
+            scanned_time_seconds_p50 = scanned_pdfs_p50 * avg_time_scanned_seconds
+            scanned_time_seconds_p90 = scanned_pdfs_p90 * avg_time_scanned_seconds
+
+            results.append({
+                "Carrier ID": carrier_id,
+                "Cases": cases,
+                "Tier": f"{tier} ({multiplier}x)",
+                "PDF Range (P10-P90)": f"{total_pdfs_p10:.0f} - {total_pdfs_p90:.0f}",
+                "PDF Median (P50)": f"{total_pdfs_p50:.0f}",
+                "Machine PDF Range (P10-P90)": f"{machine_pdfs_p10:.0f} - {machine_pdfs_p90:.0f}",
+                "Machine PDF Median (P50)": f"{machine_pdfs_p50:.0f}",
+                "Scanned PDF Range (P10-P90)": f"{scanned_pdfs_p10:.0f} - {scanned_pdfs_p90:.0f}",
+                "Scanned PDF Median (P50)": f"{scanned_pdfs_p50:.0f}",
+                "Machine Processing Time Range": f"{format_time_hours(machine_time_seconds_p10)} - {format_time_hours(machine_time_seconds_p90)}",
+                "Machine Processing Time Median": f"{format_time_hours(machine_time_seconds_p50)}",
+                "Scanned Processing Time Range": f"{format_time_hours(scanned_time_seconds_p10)} - {format_time_hours(scanned_time_seconds_p90)}",
+                "Scanned Processing Time Median": f"{format_time_hours(scanned_time_seconds_p50)}",
+                # Store numeric values for sorting and aggregation
+                "_cases": cases,
+                "_tier": tier,
+                "_multiplier": multiplier,
+                "_total_pdfs_p50": total_pdfs_p50,
+                "_machine_pdfs_p50": machine_pdfs_p50,
+                "_scanned_pdfs_p50": scanned_pdfs_p50,
+                "_machine_time_p50": machine_time_seconds_p50,
+                "_scanned_time_p50": scanned_time_seconds_p50
+            })
+
+    return pd.DataFrame(results)
+
+
 def main():
     st.set_page_config(
         page_title="Carrier Forecasting Tool",
@@ -427,6 +598,53 @@ def main():
         )
     else:
         simulations = 0
+
+    # Scenario Analysis settings (only for Multi-Carrier mode)
+    enable_scenario_analysis = False
+    tier_low_pct = 33
+    tier_same_pct = 33
+    tier_high_pct = 34
+
+    if analysis_mode == "Multi-Carrier Analysis":
+        st.sidebar.markdown("---")
+        st.sidebar.subheader("📊 Scenario Analysis")
+        enable_scenario_analysis = st.sidebar.checkbox(
+            "Enable Scenario Analysis",
+            value=False,
+            help="Model carrier variability by assigning carriers to Low/Same/High volume tiers"
+        )
+
+        if enable_scenario_analysis:
+            st.sidebar.markdown("**Tier Distribution (must sum to 100%)**")
+            tier_low_pct = st.sidebar.number_input(
+                "Low Volume (0.5x benchmark)",
+                min_value=0,
+                max_value=100,
+                value=33,
+                step=1,
+                help="Percentage of carriers with 50% fewer PDFs per case"
+            )
+            tier_same_pct = st.sidebar.number_input(
+                "Same Volume (1.0x benchmark)",
+                min_value=0,
+                max_value=100,
+                value=33,
+                step=1,
+                help="Percentage of carriers matching Carrier A benchmark"
+            )
+            tier_high_pct = st.sidebar.number_input(
+                "High Volume (1.5x benchmark)",
+                min_value=0,
+                max_value=100,
+                value=34,
+                step=1,
+                help="Percentage of carriers with 50% more PDFs per case"
+            )
+
+            # Validate percentages sum to 100
+            total_pct = tier_low_pct + tier_same_pct + tier_high_pct
+            if total_pct != 100:
+                st.sidebar.error(f"⚠️ Tier percentages must sum to 100% (currently {total_pct}%)")
 
     # Run appropriate analysis based on mode
     st.markdown("---")
@@ -801,6 +1019,165 @@ def main():
                 use_container_width=True
             )
 
+        # Scenario Analysis Section (if enabled)
+        if enable_scenario_analysis:
+            total_pct = tier_low_pct + tier_same_pct + tier_high_pct
+            if total_pct == 100:
+                st.markdown("---")
+                st.subheader("📊 Scenario Analysis (Variable Distribution)")
+                st.markdown(f"""
+                *This analysis assumes carriers vary from the benchmark:*
+                - **{tier_low_pct}%** of carriers have **Low** volume (0.5x benchmark)
+                - **{tier_same_pct}%** of carriers have **Same** volume (1.0x benchmark)
+                - **{tier_high_pct}%** of carriers have **High** volume (1.5x benchmark)
+
+                *Carriers are randomly assigned to tiers based on these percentages.*
+                """)
+
+                # Assign carriers to tiers
+                tier_assignments = assign_carriers_to_tiers(
+                    num_carriers=len(carriers_df),
+                    tier_low_pct=tier_low_pct,
+                    tier_same_pct=tier_same_pct,
+                    tier_high_pct=tier_high_pct,
+                    random_seed=42
+                )
+
+                # Run scenario simulation
+                with st.spinner("Running scenario analysis..."):
+                    scenario_results_df = batch_simulate_carriers_with_scenarios(
+                        carriers_df=carriers_df,
+                        lambda_pdfs_per_case=metrics["lambda_pdfs_per_case"],
+                        p_scanned=p_scanned,
+                        avg_time_machine_seconds=avg_time_machine_seconds,
+                        avg_time_scanned_seconds=avg_time_scanned_seconds,
+                        tier_assignments=tier_assignments,
+                        simulations=simulations
+                    )
+
+                # Display tier distribution summary
+                st.markdown("**Tier Distribution Summary**")
+                tier_counts = scenario_results_df['_tier'].value_counts()
+                tier_summary_data = []
+                for tier in ['Low', 'Same', 'High']:
+                    count = tier_counts.get(tier, 0)
+                    tier_carriers = scenario_results_df[scenario_results_df['_tier'] == tier]
+                    if len(tier_carriers) > 0:
+                        tier_summary_data.append({
+                            "Tier": f"{tier} ({'0.5x' if tier == 'Low' else '1.0x' if tier == 'Same' else '1.5x'})",
+                            "Carriers": count,
+                            "Total Cases": f"{tier_carriers['_cases'].sum():,.0f}",
+                            "Est. PDFs (Median)": f"{tier_carriers['_total_pdfs_p50'].sum():,.0f}",
+                            "Est. Processing Time": format_time_hours(
+                                tier_carriers['_machine_time_p50'].sum() + tier_carriers['_scanned_time_p50'].sum()
+                            )
+                        })
+
+                tier_summary_df = pd.DataFrame(tier_summary_data)
+                st.dataframe(tier_summary_df, hide_index=True, use_container_width=True)
+
+                # Scenario totals comparison
+                st.markdown("**Scenario vs Uniform Comparison**")
+                uniform_total_cases = results_df['_cases'].sum()
+                uniform_total_pdfs = results_df['_total_pdfs_p50'].sum()
+                uniform_total_time = results_df['_machine_time_p50'].sum() + results_df['_scanned_time_p50'].sum()
+                scenario_total_cases = scenario_results_df['_cases'].sum()
+                scenario_total_pdfs = scenario_results_df['_total_pdfs_p50'].sum()
+                scenario_total_time = scenario_results_df['_machine_time_p50'].sum() + scenario_results_df['_scanned_time_p50'].sum()
+
+                # Row 1: Uniform Distribution metrics
+                st.markdown("*Uniform Distribution (all carriers same as benchmark):*")
+                uni_col1, uni_col2, uni_col3, uni_col4, uni_col5 = st.columns(5)
+                with uni_col1:
+                    st.metric("Total Carriers", f"{len(results_df)}")
+                with uni_col2:
+                    st.metric("Total Cases", f"{uniform_total_cases:,.0f}")
+                with uni_col3:
+                    st.metric("Est. Total PDFs", f"{uniform_total_pdfs:,.0f}")
+                with uni_col4:
+                    st.metric("Est. Processing Time", format_time_hours(uniform_total_time))
+                with uni_col5:
+                    uniform_total_days = uniform_total_time / 86400
+                    st.metric("Est. Time (Days)", f"{uniform_total_days:.2f} days")
+
+                # Row 2: Scenario Distribution metrics
+                st.markdown("*Scenario Distribution (carriers vary by tier):*")
+                scn_col1, scn_col2, scn_col3, scn_col4, scn_col5 = st.columns(5)
+                with scn_col1:
+                    st.metric("Total Carriers", f"{len(scenario_results_df)}")
+                with scn_col2:
+                    st.metric("Total Cases", f"{scenario_total_cases:,.0f}")
+                with scn_col3:
+                    st.metric("Est. Total PDFs", f"{scenario_total_pdfs:,.0f}",
+                              delta=f"{((scenario_total_pdfs/uniform_total_pdfs)-1)*100:+.1f}%" if uniform_total_pdfs > 0 else None)
+                with scn_col4:
+                    st.metric("Est. Processing Time", format_time_hours(scenario_total_time),
+                              delta=f"{((scenario_total_time/uniform_total_time)-1)*100:+.1f}%" if uniform_total_time > 0 else None)
+                with scn_col5:
+                    scenario_total_days = scenario_total_time / 86400
+                    st.metric("Est. Time (Days)", f"{scenario_total_days:.2f} days",
+                              delta=f"{((scenario_total_days/(uniform_total_time/86400))-1)*100:+.1f}%" if uniform_total_time > 0 else None)
+
+                # Bucketed scenario summary
+                st.markdown("---")
+                st.markdown("**Bucketed Scenario Summary**")
+
+                scenario_bucket_data = []
+                for min_val, max_val in buckets:
+                    if max_val == float('inf'):
+                        bucket_carriers = scenario_results_df[scenario_results_df['_cases'] >= min_val]
+                    else:
+                        bucket_carriers = scenario_results_df[(scenario_results_df['_cases'] >= min_val) & (scenario_results_df['_cases'] <= max_val)]
+
+                    if len(bucket_carriers) > 0:
+                        total_pdfs_p50 = bucket_carriers['_total_pdfs_p50']
+                        machine_time_p50 = bucket_carriers['_machine_time_p50']
+                        scanned_time_p50 = bucket_carriers['_scanned_time_p50']
+
+                        # Count tiers in bucket
+                        low_count = len(bucket_carriers[bucket_carriers['_tier'] == 'Low'])
+                        same_count = len(bucket_carriers[bucket_carriers['_tier'] == 'Same'])
+                        high_count = len(bucket_carriers[bucket_carriers['_tier'] == 'High'])
+
+                        scenario_bucket_data.append({
+                            "Case Range": create_bucket_label(min_val, max_val),
+                            "Carriers": len(bucket_carriers),
+                            "Tier Mix (L/S/H)": f"{low_count}/{same_count}/{high_count}",
+                            "PDF Range": f"{total_pdfs_p50.min():.0f} - {total_pdfs_p50.max():.0f}",
+                            "Total Time Range": f"{format_time_hours(machine_time_p50.min() + scanned_time_p50.min())} - {format_time_hours(machine_time_p50.max() + scanned_time_p50.max())}"
+                        })
+
+                scenario_bucket_df = pd.DataFrame(scenario_bucket_data)
+                st.dataframe(scenario_bucket_df, hide_index=True, use_container_width=True)
+
+                # Export scenario analysis
+                col1, col2 = st.columns(2)
+                with col1:
+                    scenario_display_cols = [col for col in scenario_results_df.columns if not col.startswith('_')]
+                    scenario_display_df = scenario_results_df[scenario_display_cols].copy()
+                    scenario_csv = scenario_display_df.to_csv(index=False)
+                    st.download_button(
+                        label="📥 Download Scenario Analysis (CSV)",
+                        data=scenario_csv,
+                        file_name="scenario_analysis.csv",
+                        mime="text/csv",
+                        use_container_width=True
+                    )
+                with col2:
+                    scenario_buffer = io.BytesIO()
+                    with pd.ExcelWriter(scenario_buffer, engine='openpyxl') as writer:
+                        scenario_display_df.to_excel(writer, index=False, sheet_name='Scenario Analysis')
+                        scenario_bucket_df.to_excel(writer, index=False, sheet_name='Scenario Buckets')
+                        tier_summary_df.to_excel(writer, index=False, sheet_name='Tier Summary')
+                    scenario_buffer.seek(0)
+                    st.download_button(
+                        label="📥 Download Scenario Analysis (Excel)",
+                        data=scenario_buffer,
+                        file_name="scenario_analysis.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        use_container_width=True
+                    )
+
 
 if __name__ == "__main__":
     main()
@@ -810,20 +1187,39 @@ if __name__ == "__main__":
 How to Run This Application
 ----------------------------
 
-1. Install dependencies:
-   pip install streamlit numpy pandas
+1. Create and activate a virtual environment:
+   python -m venv venv
+   venv\\Scripts\\activate  (Windows)
+   source venv/bin/activate  (macOS/Linux)
 
-2. Run the application:
+2. Install dependencies:
+   pip install -r requirements.txt
+
+3. Run the application:
    streamlit run app.py
 
-3. The app will open in your default browser at http://localhost:8501
+4. The app will open in your default browser at http://localhost:8501
 
-4. Usage:
-   - Enter Carrier A benchmark data in the left sidebar
-   - Enter the number of cases for Carrier X
-   - Optionally override the scanned PDF ratio
-   - Adjust number of simulations for accuracy vs. speed
-   - View results, statistics, and distributions in the main panel
+Analysis Modes
+--------------
+
+Single Carrier Mode:
+- Enter Carrier A benchmark data in the left sidebar
+- Enter the number of cases for Carrier X
+- Optionally override the scanned PDF ratio
+- Adjust number of simulations for accuracy vs. speed
+- View results, statistics, and distributions in the main panel
+
+Multi-Carrier Analysis Mode:
+- Upload a CSV/Excel file with Carrier ID and Cases columns
+- View bucketed range summary and detailed carrier analysis
+- Export results as CSV or Excel
+
+Scenario Analysis (Multi-Carrier Mode):
+- Enable to model carrier variability
+- Assign carriers to Low (0.5x), Same (1.0x), or High (1.5x) volume tiers
+- Configure tier distribution percentages (must sum to 100%)
+- Compare uniform vs scenario distributions
 
 Technical Notes
 ---------------
@@ -832,16 +1228,25 @@ Model Assumptions:
 - PDFs per case follow a Poisson distribution with λ = (Carrier A total PDFs / Carrier A cases)
 - PDF type (scanned vs. machine-readable) follows a Binomial distribution
 - Processing times are deterministic averages per PDF type
-- All carriers have similar PDF distributions unless overridden
+- All carriers have similar PDF distributions unless overridden or scenario analysis is enabled
+
+Scenario Analysis:
+- Carriers are randomly assigned to tiers based on configured percentages
+- Low tier: 0.5x benchmark PDFs per case
+- Same tier: 1.0x benchmark PDFs per case (unchanged)
+- High tier: 1.5x benchmark PDFs per case
+- Random seed is fixed for reproducibility
 
 Validation:
 - Prevents division by zero when Carrier A cases = 0
 - Auto-corrects mismatched PDF counts (machine + scanned ≠ total)
 - Validates non-negative inputs
 - Warns when expected PDFs are very large (>1M)
+- Validates tier percentages sum to 100%
 
 Performance:
-- Default 5,000 simulations provide good accuracy
+- Default 5,000 simulations for single carrier mode
+- Default 1,000 simulations for multi-carrier mode
 - Increase simulations for more precision (up to 50,000)
 - Uses vectorized NumPy operations for speed
 """

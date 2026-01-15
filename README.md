@@ -30,6 +30,7 @@ This application helps pharmacies forecast the workload for processing PDFs from
 - **Visual Distributions**: Interactive charts showing PDF volume and processing time distributions (single carrier mode)
 - **Override Capability**: Optionally override the scanned PDF ratio for different scenarios
 - **Batch Processing**: Upload CSV/Excel files with multiple carriers for comprehensive analysis
+- **Scenario Analysis**: Model carrier variability with Low/Same/High volume tiers
 - **Data Export**: Download results as CSV or Excel with formatted tables
 
 ## How to Run This Application
@@ -118,6 +119,14 @@ Required for both modes:
 8. **Override Scanned PDF Ratio** *(optional)*: Check to manually set a different scanned ratio
 9. **Number of Simulations**: Simulations per carrier (default: 1,000 for performance)
 
+#### Scenario Analysis (Multi-Carrier Mode)
+
+10. **Enable Scenario Analysis**: Check to model carrier variability
+11. **Tier Distribution** (must sum to 100%):
+    - **Low Volume (0.5x benchmark)**: Percentage of carriers with 50% fewer PDFs per case
+    - **Same Volume (1.0x benchmark)**: Percentage of carriers matching the benchmark
+    - **High Volume (1.5x benchmark)**: Percentage of carriers with 50% more PDFs per case
+
 ### Example Scenarios
 
 #### Single Carrier Example
@@ -183,7 +192,25 @@ The application uses a two-stage Monte Carlo simulation:
 - **PDFs per case** follow a Poisson distribution (appropriate for count data)
 - **Scanned vs. machine-readable ratio** follows a Binomial distribution
 - **Processing times** are deterministic averages per PDF type
-- **Carrier similarity**: Other carriers have similar PDF distributions to Carrier A (unless overridden)
+- **Carrier similarity**: Other carriers have similar PDF distributions to Carrier A (unless overridden or scenario analysis is enabled)
+
+### Scenario Analysis Model
+
+When scenario analysis is enabled, carriers are randomly assigned to volume tiers:
+
+1. **Tier Assignment**:
+   - Carriers are randomly assigned to Low, Same, or High tiers based on configured percentages
+   - Random seed is fixed (42) for reproducibility
+
+2. **Multiplier Application**:
+   - Low tier: 0.5x benchmark PDFs per case
+   - Same tier: 1.0x benchmark PDFs per case (unchanged)
+   - High tier: 1.5x benchmark PDFs per case
+
+3. **Output Comparison**:
+   - Uniform distribution: All carriers match benchmark
+   - Scenario distribution: Carriers vary by assigned tier
+   - Delta metrics show percentage difference between distributions
 
 ### Validation & Error Handling
 
@@ -225,7 +252,9 @@ distribution-analyzer/
 - `validate_benchmark_inputs()`: Validates and auto-corrects benchmark inputs
 - `compute_benchmark_metrics()`: Calculates λ and probability distributions from Carrier A
 - `simulate_forecast()`: Runs Monte Carlo simulation for a single carrier
-- `batch_simulate_carriers()`: Runs batch simulations for multiple carriers
+- `batch_simulate_carriers()`: Runs batch simulations for multiple carriers (uniform distribution)
+- `assign_carriers_to_tiers()`: Randomly assigns carriers to Low/Same/High volume tiers
+- `batch_simulate_carriers_with_scenarios()`: Runs batch simulations with tier-based multipliers
 - `compute_statistics()`: Calculates mean and percentiles
 - `format_time_hours()`: Converts seconds to human-readable format
 
@@ -250,6 +279,9 @@ distribution-analyzer/
 
 **Issue**: Excel export not working
 - **Solution**: Make sure openpyxl is installed: `pip install openpyxl>=3.1.0`
+
+**Issue**: "Tier percentages must sum to 100%"
+- **Solution**: Adjust the Low/Same/High volume percentages in Scenario Analysis so they add up to exactly 100%
 
 ## Contributing
 
