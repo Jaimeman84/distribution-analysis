@@ -1131,6 +1131,8 @@ def main():
 
                     if len(bucket_carriers) > 0:
                         total_pdfs_p50 = bucket_carriers['_total_pdfs_p50']
+                        machine_pdfs_p50 = bucket_carriers['_machine_pdfs_p50']
+                        scanned_pdfs_p50 = bucket_carriers['_scanned_pdfs_p50']
                         machine_time_p50 = bucket_carriers['_machine_time_p50']
                         scanned_time_p50 = bucket_carriers['_scanned_time_p50']
 
@@ -1144,6 +1146,8 @@ def main():
                             "Carriers": len(bucket_carriers),
                             "Tier Mix (L/S/H)": f"{low_count}/{same_count}/{high_count}",
                             "PDF Range": f"{total_pdfs_p50.min():.0f} - {total_pdfs_p50.max():.0f}",
+                            "Machine PDF Range": f"{machine_pdfs_p50.min():.0f} - {machine_pdfs_p50.max():.0f}",
+                            "Scanned PDF Range": f"{scanned_pdfs_p50.min():.0f} - {scanned_pdfs_p50.max():.0f}",
                             "Total Time Range": f"{format_time_hours(machine_time_p50.min() + scanned_time_p50.min())} - {format_time_hours(machine_time_p50.max() + scanned_time_p50.max())}"
                         })
 
