@@ -502,7 +502,7 @@ def main():
     avg_time_machine_seconds = st.sidebar.number_input(
         "Avg Processing Time - Machine PDF (seconds)",
         min_value=0.0,
-        value=0.54,
+        value=1.45,
         step=0.1,
         format="%.2f",
         help="Average time to process one machine-readable PDF"
@@ -511,7 +511,7 @@ def main():
     avg_time_scanned_seconds = st.sidebar.number_input(
         "Avg Processing Time - Scanned PDF (seconds)",
         min_value=0.0,
-        value=8.05,
+        value=20.0,
         step=0.1,
         format="%.2f",
         help="Average time to process one scanned PDF"
@@ -907,7 +907,7 @@ def main():
 
         # Define buckets
         buckets = [
-            (0, 50),
+            (1, 50),
             (51, 100),
             (101, 200),
             (201, 500),
