@@ -1141,6 +1141,9 @@ def main():
                         same_count = len(bucket_carriers[bucket_carriers['_tier'] == 'Same'])
                         high_count = len(bucket_carriers[bucket_carriers['_tier'] == 'High'])
 
+                        # Calculate total time sum for all carriers in bucket
+                        total_time_sum = machine_time_p50.sum() + scanned_time_p50.sum()
+
                         scenario_bucket_data.append({
                             "Case Range": create_bucket_label(min_val, max_val),
                             "Carriers": len(bucket_carriers),
@@ -1148,11 +1151,52 @@ def main():
                             "PDF Range": f"{total_pdfs_p50.min():.0f} - {total_pdfs_p50.max():.0f}",
                             "Machine PDF Range": f"{machine_pdfs_p50.min():.0f} - {machine_pdfs_p50.max():.0f}",
                             "Scanned PDF Range": f"{scanned_pdfs_p50.min():.0f} - {scanned_pdfs_p50.max():.0f}",
-                            "Total Time Range": f"{format_time_hours(machine_time_p50.min() + scanned_time_p50.min())} - {format_time_hours(machine_time_p50.max() + scanned_time_p50.max())}"
+                            "Total Time Range": f"{format_time_hours(machine_time_p50.min() + scanned_time_p50.min())} - {format_time_hours(machine_time_p50.max() + scanned_time_p50.max())}",
+                            "Total Time Sum": format_time_hours(total_time_sum)
                         })
 
                 scenario_bucket_df = pd.DataFrame(scenario_bucket_data)
-                st.dataframe(scenario_bucket_df, hide_index=True, use_container_width=True)
+
+                # Display with column tooltips
+                st.dataframe(
+                    scenario_bucket_df,
+                    hide_index=True,
+                    use_container_width=True,
+                    column_config={
+                        "Case Range": st.column_config.TextColumn(
+                            "Case Range",
+                            help="Range of cases for carriers in this bucket"
+                        ),
+                        "Carriers": st.column_config.NumberColumn(
+                            "Carriers",
+                            help="Number of carriers in this case range"
+                        ),
+                        "Tier Mix (L/S/H)": st.column_config.TextColumn(
+                            "Tier Mix (L/S/H)",
+                            help="Count of carriers by tier: Low (0.5x) / Same (1.0x) / High (1.5x)"
+                        ),
+                        "PDF Range": st.column_config.TextColumn(
+                            "PDF Range",
+                            help="Min to max median PDFs for individual carriers in this bucket"
+                        ),
+                        "Machine PDF Range": st.column_config.TextColumn(
+                            "Machine PDF Range",
+                            help="Min to max median machine-readable PDFs for individual carriers in this bucket"
+                        ),
+                        "Scanned PDF Range": st.column_config.TextColumn(
+                            "Scanned PDF Range",
+                            help="Min to max median scanned PDFs for individual carriers in this bucket"
+                        ),
+                        "Total Time Range": st.column_config.TextColumn(
+                            "Total Time Range",
+                            help="Min to max processing time for individual carriers in this bucket (not summed)"
+                        ),
+                        "Total Time Sum": st.column_config.TextColumn(
+                            "Total Time Sum",
+                            help="Combined processing time for ALL carriers in this bucket (aggregate workload)"
+                        )
+                    }
+                )
 
                 # Export scenario analysis
                 col1, col2 = st.columns(2)
