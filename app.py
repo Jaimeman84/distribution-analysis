@@ -470,7 +470,7 @@ def main():
     carrierA_cases = st.sidebar.number_input(
         "Number of Cases",
         min_value=1,
-        value=900,
+        value=984,
         step=1,
         help="Total number of cases for Carrier A"
     )
@@ -478,7 +478,7 @@ def main():
     carrierA_total_pdfs = st.sidebar.number_input(
         "Total PDFs",
         min_value=0,
-        value=403,
+        value=197,
         step=1,
         help="Total number of PDFs across all cases"
     )
@@ -486,7 +486,7 @@ def main():
     carrierA_machine_pdfs = st.sidebar.number_input(
         "Machine-Readable PDFs",
         min_value=0,
-        value=309,
+        value=167,
         step=1,
         help="Number of machine-readable PDFs"
     )
@@ -494,7 +494,7 @@ def main():
     carrierA_scanned_pdfs = st.sidebar.number_input(
         "Scanned PDFs (OCR required)",
         min_value=0,
-        value=94,
+        value=30,
         step=1,
         help="Number of scanned PDFs requiring OCR"
     )
