@@ -518,6 +518,27 @@ def main():
         help="Average time to process one scanned PDF"
     )
 
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("Human Processing Times")
+
+    human_time_per_case = st.sidebar.number_input(
+        "Human Review Time per Case (seconds)",
+        min_value=0.0,
+        value=5.0,
+        step=0.5,
+        format="%.1f",
+        help="Average time for a human to review one case"
+    )
+
+    human_time_per_pdf = st.sidebar.number_input(
+        "Human Review Time per PDF (seconds)",
+        min_value=0.0,
+        value=10.0,
+        step=0.5,
+        format="%.1f",
+        help="Average time for a human to review one PDF (regardless of type)"
+    )
+
     # Excel Formula Reference (collapsible)
     with st.sidebar.expander("📐 Excel Formula Reference"):
         # Calculate current benchmark values for display
@@ -1003,9 +1024,12 @@ def main():
 
             if len(bucket_carriers) > 0:
                 total_pdfs_p50 = bucket_carriers['_total_pdfs_p50']
+                cases_per_carrier = bucket_carriers['_cases']
                 # Calculate total processing time for each carrier (machine + scanned)
                 total_time_per_carrier = bucket_carriers['_machine_time_p50'] + bucket_carriers['_scanned_time_p50']
-                
+                # Calculate human processing time for each carrier
+                human_time_per_carrier = (cases_per_carrier * human_time_per_case) + (total_pdfs_p50 * human_time_per_pdf)
+
                 pdf_stats_data.append({
                     "Case Range": create_bucket_label(min_val, max_val),
                     "Carriers": len(bucket_carriers),
@@ -1019,7 +1043,11 @@ def main():
                     # Store numeric values for charting
                     "_min_time": total_time_per_carrier.min(),
                     "_max_time": total_time_per_carrier.max(),
-                    "_avg_time": total_time_per_carrier.mean()
+                    "_avg_time": total_time_per_carrier.mean(),
+                    "_min_human_time": human_time_per_carrier.min(),
+                    "_max_human_time": human_time_per_carrier.max(),
+                    "_avg_human_time": human_time_per_carrier.mean(),
+                    "_total_human_time": human_time_per_carrier.sum()
                 })
 
         if pdf_stats_data:
@@ -1101,6 +1129,64 @@ def main():
                 )
             )
             st.plotly_chart(fig_time, use_container_width=True)
+
+            # Create Human vs Automated Processing Time Comparison Table
+            st.markdown("**Human vs Automated Processing Time Comparison**")
+            comparison_data = []
+            for row in pdf_stats_data:
+                auto_total = row['_avg_time']
+                human_total = row['_avg_human_time']
+                time_saved = human_total - auto_total
+                speedup = human_total / auto_total if auto_total > 0 else 0
+
+                comparison_data.append({
+                    "Case Range": row['Case Range'],
+                    "Carriers": row['Carriers'],
+                    "Avg PDFs": row['Avg PDFs'],
+                    "Automated Time (Avg)": format_time_hours(auto_total),
+                    "Human Time (Avg)": format_time_hours(human_total),
+                    "Time Saved (Avg)": format_time_hours(time_saved),
+                    "Speedup": f"{speedup:.1f}x",
+                    "Total Automated": format_time_hours(row['_avg_time'] * row['Carriers']),
+                    "Total Human": format_time_hours(row['_avg_human_time'] * row['Carriers']),
+                    # Hidden columns for chart
+                    "_auto_hrs": auto_total / 3600,
+                    "_human_hrs": human_total / 3600
+                })
+
+            comparison_df = pd.DataFrame(comparison_data)
+            display_cols = [col for col in comparison_df.columns if not col.startswith('_')]
+            st.dataframe(comparison_df[display_cols], hide_index=True, use_container_width=True)
+
+            # Create comparison bar chart
+            fig_compare = go.Figure()
+            fig_compare.add_trace(go.Bar(
+                name='Automated',
+                x=comparison_df['Case Range'],
+                y=comparison_df['_auto_hrs'],
+                marker_color='#2ecc71'
+            ))
+            fig_compare.add_trace(go.Bar(
+                name='Human',
+                x=comparison_df['Case Range'],
+                y=comparison_df['_human_hrs'],
+                marker_color='#e74c3c'
+            ))
+            fig_compare.update_layout(
+                barmode='group',
+                xaxis_title="Case Range",
+                yaxis_title="Average Processing Time (hours)",
+                height=350,
+                margin=dict(t=20, b=40, l=40, r=20),
+                legend=dict(
+                    orientation="h",
+                    yanchor="bottom",
+                    y=1.02,
+                    xanchor="right",
+                    x=1
+                )
+            )
+            st.plotly_chart(fig_compare, use_container_width=True)
 
         # Create carrier distribution bar chart
         if len(bucket_summary_df) > 0:
@@ -1344,9 +1430,12 @@ def main():
 
                     if len(bucket_carriers) > 0:
                         total_pdfs_p50 = bucket_carriers['_total_pdfs_p50']
+                        cases_per_carrier = bucket_carriers['_cases']
                         # Calculate total processing time for each carrier (machine + scanned)
                         total_time_per_carrier = bucket_carriers['_machine_time_p50'] + bucket_carriers['_scanned_time_p50']
-                        
+                        # Calculate human processing time for each carrier
+                        human_time_per_carrier = (cases_per_carrier * human_time_per_case) + (total_pdfs_p50 * human_time_per_pdf)
+
                         scenario_pdf_stats_data.append({
                             "Case Range": create_bucket_label(min_val, max_val),
                             "Carriers": len(bucket_carriers),
@@ -1360,7 +1449,11 @@ def main():
                             # Store numeric values for charting
                             "_min_time": total_time_per_carrier.min(),
                             "_max_time": total_time_per_carrier.max(),
-                            "_avg_time": total_time_per_carrier.mean()
+                            "_avg_time": total_time_per_carrier.mean(),
+                            "_min_human_time": human_time_per_carrier.min(),
+                            "_max_human_time": human_time_per_carrier.max(),
+                            "_avg_human_time": human_time_per_carrier.mean(),
+                            "_total_human_time": human_time_per_carrier.sum()
                         })
 
                 if scenario_pdf_stats_data:
@@ -1442,6 +1535,63 @@ def main():
                         )
                     )
                     st.plotly_chart(fig_time, use_container_width=True)
+
+                    # Create Human vs Automated Processing Time Comparison Table (Scenario)
+                    st.markdown("**Human vs Automated Processing Time Comparison (Scenario)**")
+                    scenario_comparison_data = []
+                    for row in scenario_pdf_stats_data:
+                        auto_total = row['_avg_time']
+                        human_total = row['_avg_human_time']
+                        time_saved = human_total - auto_total
+                        speedup = human_total / auto_total if auto_total > 0 else 0
+
+                        scenario_comparison_data.append({
+                            "Case Range": row['Case Range'],
+                            "Carriers": row['Carriers'],
+                            "Avg PDFs": row['Avg PDFs'],
+                            "Automated Time (Avg)": format_time_hours(auto_total),
+                            "Human Time (Avg)": format_time_hours(human_total),
+                            "Time Saved (Avg)": format_time_hours(time_saved),
+                            "Speedup": f"{speedup:.1f}x",
+                            "Total Automated": format_time_hours(row['_avg_time'] * row['Carriers']),
+                            "Total Human": format_time_hours(row['_avg_human_time'] * row['Carriers']),
+                            "_auto_hrs": auto_total / 3600,
+                            "_human_hrs": human_total / 3600
+                        })
+
+                    scenario_comparison_df = pd.DataFrame(scenario_comparison_data)
+                    display_cols = [col for col in scenario_comparison_df.columns if not col.startswith('_')]
+                    st.dataframe(scenario_comparison_df[display_cols], hide_index=True, use_container_width=True)
+
+                    # Create comparison bar chart
+                    fig_compare = go.Figure()
+                    fig_compare.add_trace(go.Bar(
+                        name='Automated',
+                        x=scenario_comparison_df['Case Range'],
+                        y=scenario_comparison_df['_auto_hrs'],
+                        marker_color='#2ecc71'
+                    ))
+                    fig_compare.add_trace(go.Bar(
+                        name='Human',
+                        x=scenario_comparison_df['Case Range'],
+                        y=scenario_comparison_df['_human_hrs'],
+                        marker_color='#e74c3c'
+                    ))
+                    fig_compare.update_layout(
+                        barmode='group',
+                        xaxis_title="Case Range",
+                        yaxis_title="Average Processing Time (hours)",
+                        height=350,
+                        margin=dict(t=20, b=40, l=40, r=20),
+                        legend=dict(
+                            orientation="h",
+                            yanchor="bottom",
+                            y=1.02,
+                            xanchor="right",
+                            x=1
+                        )
+                    )
+                    st.plotly_chart(fig_compare, use_container_width=True)
 
                 # Create stacked bar chart showing carrier distribution by tier
                 if len(scenario_bucket_df) > 0:

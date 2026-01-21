@@ -536,6 +536,87 @@ High Tier (34%): 724 carriers using λ = 0.3004
 
 ---
 
+## Human vs Automated Processing Time
+
+### Human Processing Time Formula
+
+The human processing time calculation models how long it would take a human to manually review cases and PDFs.
+
+**Formula:**
+```
+Human Processing Time = (Cases × Human Time per Case) + (Total PDFs × Human Time per PDF)
+```
+
+**Default Values:**
+| Parameter | Default Value | Description |
+|-----------|---------------|-------------|
+| Human Time per Case | 5 seconds | Time for a human to review one case |
+| Human Time per PDF | 10 seconds | Time for a human to review one PDF (any type) |
+
+### Human Processing Time Examples
+
+Using data from carriers_1.21.xlsx with default human review times:
+
+**Example 1: Carrier 722 (50 cases, ~10 PDFs)**
+```
+Case review:  50 × 5 sec = 250 sec
+PDF review:   10 × 10 sec = 100 sec
+Human Total:  350 sec = 5.8 min
+
+Automated:    ~43 sec
+Speedup:      350 ÷ 43 = 8.1x faster
+```
+
+**Example 2: Carrier 6027 (9,841 cases, ~1,971 PDFs)**
+```
+Case review:  9,841 × 5 sec = 49,205 sec
+PDF review:   1,971 × 10 sec = 19,710 sec
+Human Total:  68,915 sec = 19.1 hrs
+
+Automated:    ~2.34 hrs
+Speedup:      19.1 ÷ 2.34 = 8.2x faster
+```
+
+**Example 3: Full Dataset (1,141,039 cases, ~228,550 PDFs)**
+```
+Case review:  1,141,039 × 5 sec = 5,705,195 sec
+PDF review:   228,550 × 10 sec = 2,285,500 sec
+Human Total:  7,990,695 sec = 2,219.6 hrs = 92.5 days
+
+Automated:    ~271.4 hrs = 11.3 days
+Speedup:      2,219.6 ÷ 271.4 = 8.2x faster
+Time Saved:   1,948.2 hrs = 81.2 days
+```
+
+### Comparison Table
+
+| Cases | Est. PDFs | Automated Time | Human Time | Speedup | Time Saved |
+|-------|-----------|----------------|------------|---------|------------|
+| 50 | 10 | 43 sec | 5.8 min | 8.1x | 5.1 min |
+| 200 | 40 | 2.8 min | 23.3 min | 8.3x | 20.5 min |
+| 1,000 | 200 | 14.3 min | 1.9 hrs | 8.1x | 1.7 hrs |
+| 10,000 | 2,003 | 2.4 hrs | 19.4 hrs | 8.1x | 17.0 hrs |
+| 52,631 | 10,542 | 12.5 hrs | 102.3 hrs | 8.2x | 89.8 hrs |
+| 1,141,039 | 228,550 | 271.4 hrs | 2,219.6 hrs | 8.2x | 1,948.2 hrs |
+
+### Excel Formulas for Human Processing
+
+```excel
+Human Time (sec) = (Cases × 5) + (Total_PDFs × 10)
+Human Time (hrs) = Human_Time_sec / 3600
+Time Saved (sec) = Human_Time_sec - Automated_Time_sec
+Speedup = Human_Time_sec / Automated_Time_sec
+```
+
+### Key Insight: Why Automation Matters
+
+With default values:
+- **Automated processing is ~8x faster** than manual human review
+- **For the full dataset**: Automation saves **81+ days** of manual work
+- **Breakeven point**: Even small carriers benefit significantly from automation
+
+---
+
 ## Explaining to Leadership
 
 ### The Simple Story
@@ -551,6 +632,8 @@ High Tier (34%): 724 carriers using λ = 0.3004
 - **Scanned PDFs are 14x slower** than machine-readable (20 sec vs 1.45 sec)
 - **15% of PDFs are scanned**, but they account for **71% of processing time**
 - **The full dataset (1.1M cases)** requires approximately **271 hours** (11.3 days continuous)
+- **Automation is ~8x faster** than manual human review
+- **Time saved on full dataset**: ~1,948 hours (81 days) compared to manual processing
 
 ### Why This Matters
 
@@ -567,6 +650,7 @@ The tool helps with:
 |---------|------|---------|
 | 1.0.0 | January 2026 | Initial release |
 | 1.1.0 | January 2026 | Added comprehensive formulas, Excel reference, real data examples |
+| 1.2.0 | January 2026 | Added Human vs Automated processing time comparison |
 
 ---
 
