@@ -518,6 +518,51 @@ def main():
         help="Average time to process one scanned PDF"
     )
 
+    # Excel Formula Reference (collapsible)
+    with st.sidebar.expander("📐 Excel Formula Reference"):
+        # Calculate current benchmark values for display
+        lambda_val = carrierA_total_pdfs / carrierA_cases if carrierA_cases > 0 else 0
+        scanned_ratio = carrierA_scanned_pdfs / carrierA_total_pdfs if carrierA_total_pdfs > 0 else 0
+
+        st.markdown("**Current Benchmark Values:**")
+        st.markdown(f"""
+| Parameter | Value |
+|-----------|-------|
+| λ (PDFs/Case) | {lambda_val:.4f} |
+| Scanned Ratio | {scanned_ratio:.4f} ({scanned_ratio*100:.1f}%) |
+| Machine Time | {avg_time_machine_seconds} sec |
+| Scanned Time | {avg_time_scanned_seconds} sec |
+""")
+
+        st.markdown("**Excel Formulas:**")
+        st.code(f"Est. Total PDFs = Cases × {lambda_val:.4f}", language=None)
+        st.code(f"Est. Machine PDFs = Total_PDFs × {1-scanned_ratio:.4f}", language=None)
+        st.code(f"Est. Scanned PDFs = Total_PDFs × {scanned_ratio:.4f}", language=None)
+        st.code(f"Machine Time (sec) = Machine_PDFs × {avg_time_machine_seconds}", language=None)
+        st.code(f"Scanned Time (sec) = Scanned_PDFs × {avg_time_scanned_seconds}", language=None)
+        st.code("Total Time (sec) = Machine_Time + Scanned_Time", language=None)
+        st.code("Total Time (hrs) = Total_Time_sec / 3600", language=None)
+
+        st.markdown("**Example (100 cases):**")
+        example_cases = 100
+        example_pdfs = example_cases * lambda_val
+        example_machine = example_pdfs * (1 - scanned_ratio)
+        example_scanned = example_pdfs * scanned_ratio
+        example_machine_time = example_machine * avg_time_machine_seconds
+        example_scanned_time = example_scanned * avg_time_scanned_seconds
+        example_total_time = example_machine_time + example_scanned_time
+
+        st.markdown(f"""
+| Step | Calculation | Result |
+|------|-------------|--------|
+| Total PDFs | 100 × {lambda_val:.4f} | {example_pdfs:.1f} |
+| Machine PDFs | {example_pdfs:.1f} × {1-scanned_ratio:.4f} | {example_machine:.1f} |
+| Scanned PDFs | {example_pdfs:.1f} × {scanned_ratio:.4f} | {example_scanned:.1f} |
+| Machine Time | {example_machine:.1f} × {avg_time_machine_seconds} | {example_machine_time:.1f} sec |
+| Scanned Time | {example_scanned:.1f} × {avg_time_scanned_seconds} | {example_scanned_time:.1f} sec |
+| **Total Time** | {example_machine_time:.1f} + {example_scanned_time:.1f} | **{example_total_time:.1f} sec** ({example_total_time/60:.1f} min) |
+""")
+
     st.sidebar.markdown("---")
 
     # Mode-specific inputs
