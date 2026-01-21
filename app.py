@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 from typing import Dict, Tuple, List
 import io
+import plotly.graph_objects as go
 
 
 def validate_benchmark_inputs(
@@ -946,6 +947,28 @@ def main():
                 })
 
         bucket_summary_df = pd.DataFrame(bucket_data)
+
+        # Create carrier distribution bar chart
+        if len(bucket_summary_df) > 0:
+            st.markdown("**Carrier Distribution by Case Bucket**")
+            fig = go.Figure(data=[
+                go.Bar(
+                    x=bucket_summary_df['Case Range'],
+                    y=bucket_summary_df['Carriers'],
+                    text=bucket_summary_df['Carriers'],
+                    textposition='auto',
+                    marker_color='steelblue'
+                )
+            ])
+            fig.update_layout(
+                xaxis_title="Case Range",
+                yaxis_title="Number of Carriers",
+                height=350,
+                margin=dict(t=20, b=40, l=40, r=20),
+                showlegend=False
+            )
+            st.plotly_chart(fig, use_container_width=True)
+
         st.dataframe(
             bucket_summary_df,
             hide_index=True,
@@ -1156,6 +1179,64 @@ def main():
                         })
 
                 scenario_bucket_df = pd.DataFrame(scenario_bucket_data)
+
+                # Create stacked bar chart showing carrier distribution by tier
+                if len(scenario_bucket_df) > 0:
+                    st.markdown("**Carrier Distribution by Case Bucket (with Tier Breakdown)**")
+
+                    # Parse tier mix to get separate counts
+                    tier_data = []
+                    for _, row in scenario_bucket_df.iterrows():
+                        tier_mix = row['Tier Mix (L/S/H)'].split('/')
+                        tier_data.append({
+                            'Case Range': row['Case Range'],
+                            'Low (0.5x)': int(tier_mix[0]),
+                            'Same (1.0x)': int(tier_mix[1]),
+                            'High (1.5x)': int(tier_mix[2])
+                        })
+                    tier_chart_df = pd.DataFrame(tier_data)
+
+                    fig = go.Figure()
+                    fig.add_trace(go.Bar(
+                        name='Low (0.5x)',
+                        x=tier_chart_df['Case Range'],
+                        y=tier_chart_df['Low (0.5x)'],
+                        marker_color='#3498db',
+                        text=tier_chart_df['Low (0.5x)'],
+                        textposition='auto'
+                    ))
+                    fig.add_trace(go.Bar(
+                        name='Same (1.0x)',
+                        x=tier_chart_df['Case Range'],
+                        y=tier_chart_df['Same (1.0x)'],
+                        marker_color='#2ecc71',
+                        text=tier_chart_df['Same (1.0x)'],
+                        textposition='auto'
+                    ))
+                    fig.add_trace(go.Bar(
+                        name='High (1.5x)',
+                        x=tier_chart_df['Case Range'],
+                        y=tier_chart_df['High (1.5x)'],
+                        marker_color='#e74c3c',
+                        text=tier_chart_df['High (1.5x)'],
+                        textposition='auto'
+                    ))
+
+                    fig.update_layout(
+                        barmode='stack',
+                        xaxis_title="Case Range",
+                        yaxis_title="Number of Carriers",
+                        height=350,
+                        margin=dict(t=20, b=40, l=40, r=20),
+                        legend=dict(
+                            orientation="h",
+                            yanchor="bottom",
+                            y=1.02,
+                            xanchor="right",
+                            x=1
+                        )
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
 
                 # Display with column tooltips
                 st.dataframe(
