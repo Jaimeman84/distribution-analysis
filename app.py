@@ -1056,6 +1056,25 @@ def main():
             # Display table without hidden columns
             display_columns = [col for col in pdf_stats_df.columns if not col.startswith('_')]
             st.dataframe(pdf_stats_df[display_columns], hide_index=True, use_container_width=True)
+            
+            # Add user-friendly formula explanation for PDF processing time
+            example_cases = 100
+            example_pdfs = example_cases * metrics["lambda_pdfs_per_case"]
+            example_machine_pdfs = example_pdfs * (1 - p_scanned)
+            example_scanned_pdfs = example_pdfs * p_scanned
+            example_time = (example_machine_pdfs * avg_time_machine_seconds) + (example_scanned_pdfs * avg_time_scanned_seconds)
+            
+            st.info(f"""
+            **📐 How Automated Processing Time is Calculated:**
+            
+            For each carrier:
+            - **Automated Processing Time** = (Machine PDFs × {avg_time_machine_seconds} sec) + (Scanned PDFs × {avg_time_scanned_seconds} sec)
+            
+            **Example:** A carrier with 100 cases would have approximately {example_pdfs:.0f} PDFs ({example_machine_pdfs:.0f} machine + {example_scanned_pdfs:.0f} scanned):
+            - ({example_machine_pdfs:.0f} PDFs × {avg_time_machine_seconds} sec) + ({example_scanned_pdfs:.0f} PDFs × {avg_time_scanned_seconds} sec) = **{example_time:.0f} seconds** = **{format_time_hours(example_time)}**
+            
+            💡 *Based on Carrier A benchmark: {metrics["lambda_pdfs_per_case"]:.2f} PDFs per case, {p_scanned*100:.0f}% scanned.*
+            """)
 
             # Create grouped bar chart for Min/Max/Avg PDFs
             fig = go.Figure()
@@ -1485,6 +1504,25 @@ def main():
                     # Display table without hidden columns
                     display_columns = [col for col in scenario_pdf_stats_df.columns if not col.startswith('_')]
                     st.dataframe(scenario_pdf_stats_df[display_columns], hide_index=True, use_container_width=True)
+                    
+                    # Add user-friendly formula explanation for PDF processing time
+                    example_cases = 100
+                    example_pdfs = example_cases * metrics["lambda_pdfs_per_case"]
+                    example_machine_pdfs = example_pdfs * (1 - p_scanned)
+                    example_scanned_pdfs = example_pdfs * p_scanned
+                    example_time = (example_machine_pdfs * avg_time_machine_seconds) + (example_scanned_pdfs * avg_time_scanned_seconds)
+                    
+                    st.info(f"""
+                    **📐 How Automated Processing Time is Calculated:**
+                    
+                    For each carrier:
+                    - **Automated Processing Time** = (Machine PDFs × {avg_time_machine_seconds} sec) + (Scanned PDFs × {avg_time_scanned_seconds} sec)
+                    
+                    **Example:** A carrier with 100 cases in the Same Tier (1.0x) would have approximately {example_pdfs:.0f} PDFs ({example_machine_pdfs:.0f} machine + {example_scanned_pdfs:.0f} scanned):
+                    - ({example_machine_pdfs:.0f} PDFs × {avg_time_machine_seconds} sec) + ({example_scanned_pdfs:.0f} PDFs × {avg_time_scanned_seconds} sec) = **{example_time:.0f} seconds** = **{format_time_hours(example_time)}**
+                    
+                    💡 *Based on Carrier A benchmark: {metrics["lambda_pdfs_per_case"]:.2f} PDFs per case, {p_scanned*100:.0f}% scanned. Tier multipliers (0.5x/1.0x/1.5x) adjust PDF volumes.*
+                    """)
 
                     # Create grouped bar chart for Min/Max/Avg PDFs (Scenario)
                     fig = go.Figure()
