@@ -1062,18 +1062,31 @@ def main():
             example_pdfs = example_cases * metrics["lambda_pdfs_per_case"]
             example_machine_pdfs = example_pdfs * (1 - p_scanned)
             example_scanned_pdfs = example_pdfs * p_scanned
-            example_time = (example_machine_pdfs * avg_time_machine_seconds) + (example_scanned_pdfs * avg_time_scanned_seconds)
+            example_machine_time = example_machine_pdfs * avg_time_machine_seconds
+            example_scanned_time = example_scanned_pdfs * avg_time_scanned_seconds
+            example_time = example_machine_time + example_scanned_time
             
             st.info(f"""
             **📐 How Automated Processing Time is Calculated:**
             
-            For each carrier:
-            - **Automated Processing Time** = (Machine PDFs × {avg_time_machine_seconds} sec) + (Scanned PDFs × {avg_time_scanned_seconds} sec)
+            **Step-by-step for each carrier:**
             
-            **Example:** A carrier with 100 cases would have approximately {example_pdfs:.0f} PDFs ({example_machine_pdfs:.0f} machine + {example_scanned_pdfs:.0f} scanned):
-            - ({example_machine_pdfs:.0f} PDFs × {avg_time_machine_seconds} sec) + ({example_scanned_pdfs:.0f} PDFs × {avg_time_scanned_seconds} sec) = **{example_time:.0f} seconds** = **{format_time_hours(example_time)}**
+            1. **Estimate Total PDFs:** Cases × {metrics["lambda_pdfs_per_case"]:.4f} PDFs/case
+            2. **Split by Type:** {(1-p_scanned)*100:.1f}% machine-readable, {p_scanned*100:.1f}% scanned
+            3. **Calculate Time:** (Machine PDFs × {avg_time_machine_seconds} sec) + (Scanned PDFs × {avg_time_scanned_seconds} sec)
             
-            💡 *Based on Carrier A benchmark: {metrics["lambda_pdfs_per_case"]:.2f} PDFs per case, {p_scanned*100:.0f}% scanned.*
+            **Example: Carrier with 100 cases**
+            - Step 1: 100 cases × {metrics["lambda_pdfs_per_case"]:.4f} = **{example_pdfs:.1f} total PDFs**
+            - Step 2: {example_pdfs:.1f} × {(1-p_scanned)*100:.1f}% = **{example_machine_pdfs:.1f} machine PDFs**, {example_pdfs:.1f} × {p_scanned*100:.1f}% = **{example_scanned_pdfs:.1f} scanned PDFs**
+            - Step 3: ({example_machine_pdfs:.1f} × {avg_time_machine_seconds} sec) + ({example_scanned_pdfs:.1f} × {avg_time_scanned_seconds} sec)
+            - Step 3: {example_machine_time:.1f} sec + {example_scanned_time:.1f} sec = **{example_time:.1f} seconds = {format_time_hours(example_time)}**
+            
+            **For each bucket (e.g., "1-50" with 227 carriers):**
+            - Each of the 227 carriers is calculated individually using the steps above
+            - **Min/Max/Avg Processing Time** = Smallest/Largest/Average among those 227 carriers
+            - **Total Processing Time** = Sum of all 227 carriers' processing times
+            
+            💡 *Monte Carlo simulation adds randomness, so actual values vary slightly from these estimates.*
             """)
 
             # Create grouped bar chart for Min/Max/Avg PDFs
@@ -1277,6 +1290,87 @@ def main():
                 label="📥 Download Bucketed Summary (Excel)",
                 data=bucket_buffer,
                 file_name="bucketed_summary.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True
+            )
+
+        # Create detailed carrier-level calculation table
+        st.markdown("---")
+        st.subheader("🔬 Detailed Carrier-Level Calculations")
+        st.markdown("*This table shows the step-by-step calculation breakdown for each individual carrier*")
+        
+        # Build detailed calculation table
+        detailed_calc_data = []
+        for idx, row in carriers_df.iterrows():
+            carrier_id = row['Carrier ID']
+            cases = int(row['Cases'])
+            
+            # Step 1: Estimate Total PDFs
+            total_pdfs_est = cases * metrics["lambda_pdfs_per_case"]
+            
+            # Step 2: Split by type
+            machine_pdfs_est = total_pdfs_est * (1 - p_scanned)
+            scanned_pdfs_est = total_pdfs_est * p_scanned
+            
+            # Step 3: Calculate times
+            machine_time = machine_pdfs_est * avg_time_machine_seconds
+            scanned_time = scanned_pdfs_est * avg_time_scanned_seconds
+            total_auto_time = machine_time + scanned_time
+            
+            # Human time calculation
+            human_time = (cases * human_time_per_case) + (total_pdfs_est * human_time_per_pdf)
+            
+            # Time saved and speedup
+            time_saved = human_time - total_auto_time
+            speedup = human_time / total_auto_time if total_auto_time > 0 else 0
+            
+            detailed_calc_data.append({
+                "Carrier ID": carrier_id,
+                "Cases": cases,
+                "Total PDFs (Est)": f"{total_pdfs_est:.1f}",
+                "Machine PDFs": f"{machine_pdfs_est:.1f}",
+                "Scanned PDFs": f"{scanned_pdfs_est:.1f}",
+                "Machine Time": format_time_hours(machine_time),
+                "Scanned Time": format_time_hours(scanned_time),
+                "Total Automated Time": format_time_hours(total_auto_time),
+                "Human Time": format_time_hours(human_time),
+                "Time Saved": format_time_hours(time_saved),
+                "Speedup": f"{speedup:.1f}x"
+            })
+        
+        detailed_calc_df = pd.DataFrame(detailed_calc_data)
+        st.dataframe(detailed_calc_df, hide_index=True, use_container_width=True, height=400)
+        
+        # Add explanation
+        st.info(f"""
+        **📐 Calculation Steps for Each Carrier:**
+        1. **Total PDFs** = Cases × {metrics["lambda_pdfs_per_case"]:.4f} PDFs/case
+        2. **Machine PDFs** = Total PDFs × {(1-p_scanned)*100:.1f}%, **Scanned PDFs** = Total PDFs × {p_scanned*100:.1f}%
+        3. **Automated Time** = (Machine PDFs × {avg_time_machine_seconds} sec) + (Scanned PDFs × {avg_time_scanned_seconds} sec)
+        4. **Human Time** = (Cases × {human_time_per_case} sec) + (Total PDFs × {human_time_per_pdf} sec)
+        5. **Time Saved** = Human Time - Automated Time
+        """)
+        
+        # Download detailed calculations
+        col1, col2 = st.columns(2)
+        with col1:
+            detailed_csv = detailed_calc_df.to_csv(index=False)
+            st.download_button(
+                label="📥 Download Detailed Calculations (CSV)",
+                data=detailed_csv,
+                file_name="detailed_carrier_calculations.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
+        with col2:
+            detailed_buffer = io.BytesIO()
+            with pd.ExcelWriter(detailed_buffer, engine='openpyxl') as writer:
+                detailed_calc_df.to_excel(writer, index=False, sheet_name='Detailed Calculations')
+            detailed_buffer.seek(0)
+            st.download_button(
+                label="📥 Download Detailed Calculations (Excel)",
+                data=detailed_buffer,
+                file_name="detailed_carrier_calculations.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True
             )
@@ -1510,18 +1604,31 @@ def main():
                     example_pdfs = example_cases * metrics["lambda_pdfs_per_case"]
                     example_machine_pdfs = example_pdfs * (1 - p_scanned)
                     example_scanned_pdfs = example_pdfs * p_scanned
-                    example_time = (example_machine_pdfs * avg_time_machine_seconds) + (example_scanned_pdfs * avg_time_scanned_seconds)
+                    example_machine_time = example_machine_pdfs * avg_time_machine_seconds
+                    example_scanned_time = example_scanned_pdfs * avg_time_scanned_seconds
+                    example_time = example_machine_time + example_scanned_time
                     
                     st.info(f"""
                     **📐 How Automated Processing Time is Calculated:**
                     
-                    For each carrier:
-                    - **Automated Processing Time** = (Machine PDFs × {avg_time_machine_seconds} sec) + (Scanned PDFs × {avg_time_scanned_seconds} sec)
+                    **Step-by-step for each carrier:**
                     
-                    **Example:** A carrier with 100 cases in the Same Tier (1.0x) would have approximately {example_pdfs:.0f} PDFs ({example_machine_pdfs:.0f} machine + {example_scanned_pdfs:.0f} scanned):
-                    - ({example_machine_pdfs:.0f} PDFs × {avg_time_machine_seconds} sec) + ({example_scanned_pdfs:.0f} PDFs × {avg_time_scanned_seconds} sec) = **{example_time:.0f} seconds** = **{format_time_hours(example_time)}**
+                    1. **Estimate Total PDFs:** Cases × {metrics["lambda_pdfs_per_case"]:.4f} PDFs/case × Tier Multiplier
+                    2. **Split by Type:** {(1-p_scanned)*100:.1f}% machine-readable, {p_scanned*100:.1f}% scanned
+                    3. **Calculate Time:** (Machine PDFs × {avg_time_machine_seconds} sec) + (Scanned PDFs × {avg_time_scanned_seconds} sec)
                     
-                    💡 *Based on Carrier A benchmark: {metrics["lambda_pdfs_per_case"]:.2f} PDFs per case, {p_scanned*100:.0f}% scanned. Tier multipliers (0.5x/1.0x/1.5x) adjust PDF volumes.*
+                    **Example: Carrier with 100 cases in Same Tier (1.0x)**
+                    - Step 1: 100 cases × {metrics["lambda_pdfs_per_case"]:.4f} × 1.0 = **{example_pdfs:.1f} total PDFs**
+                    - Step 2: {example_pdfs:.1f} × {(1-p_scanned)*100:.1f}% = **{example_machine_pdfs:.1f} machine PDFs**, {example_pdfs:.1f} × {p_scanned*100:.1f}% = **{example_scanned_pdfs:.1f} scanned PDFs**
+                    - Step 3: ({example_machine_pdfs:.1f} × {avg_time_machine_seconds} sec) + ({example_scanned_pdfs:.1f} × {avg_time_scanned_seconds} sec)
+                    - Step 3: {example_machine_time:.1f} sec + {example_scanned_time:.1f} sec = **{example_time:.1f} seconds = {format_time_hours(example_time)}**
+                    
+                    **For each bucket (e.g., "1-50" with 227 carriers):**
+                    - Each of the 227 carriers is calculated individually using the steps above
+                    - **Min/Max/Avg Processing Time** = Smallest/Largest/Average among those 227 carriers
+                    - **Total Processing Time** = Sum of all 227 carriers' processing times
+                    
+                    💡 *Monte Carlo simulation adds randomness, so actual values vary slightly from these estimates.*
                     """)
 
                     # Create grouped bar chart for Min/Max/Avg PDFs (Scenario)
@@ -1676,6 +1783,90 @@ def main():
                         )
                     )
                     st.plotly_chart(fig_compare, use_container_width=True)
+
+                # Create detailed carrier-level calculation table for scenario
+                st.markdown("---")
+                st.subheader("🔬 Detailed Carrier-Level Calculations (Scenario)")
+                st.markdown("*This table shows the step-by-step calculation breakdown for each individual carrier with tier assignments*")
+                
+                # Build detailed calculation table with tier info
+                scenario_detailed_calc_data = []
+                for idx, row in carriers_df.iterrows():
+                    carrier_id = row['Carrier ID']
+                    cases = int(row['Cases'])
+                    tier = tier_assignments[idx] if idx < len(tier_assignments) else 'Same'
+                    tier_multiplier = {'Low': 0.5, 'Same': 1.0, 'High': 1.5}[tier]
+                    
+                    # Step 1: Estimate Total PDFs with tier multiplier
+                    total_pdfs_est = cases * metrics["lambda_pdfs_per_case"] * tier_multiplier
+                    
+                    # Step 2: Split by type
+                    machine_pdfs_est = total_pdfs_est * (1 - p_scanned)
+                    scanned_pdfs_est = total_pdfs_est * p_scanned
+                    
+                    # Step 3: Calculate times
+                    machine_time = machine_pdfs_est * avg_time_machine_seconds
+                    scanned_time = scanned_pdfs_est * avg_time_scanned_seconds
+                    total_auto_time = machine_time + scanned_time
+                    
+                    # Human time calculation
+                    human_time = (cases * human_time_per_case) + (total_pdfs_est * human_time_per_pdf)
+                    
+                    # Time saved and speedup
+                    time_saved = human_time - total_auto_time
+                    speedup = human_time / total_auto_time if total_auto_time > 0 else 0
+                    
+                    scenario_detailed_calc_data.append({
+                        "Carrier ID": carrier_id,
+                        "Cases": cases,
+                        "Tier": f"{tier} ({tier_multiplier}x)",
+                        "Total PDFs (Est)": f"{total_pdfs_est:.1f}",
+                        "Machine PDFs": f"{machine_pdfs_est:.1f}",
+                        "Scanned PDFs": f"{scanned_pdfs_est:.1f}",
+                        "Machine Time": format_time_hours(machine_time),
+                        "Scanned Time": format_time_hours(scanned_time),
+                        "Total Automated Time": format_time_hours(total_auto_time),
+                        "Human Time": format_time_hours(human_time),
+                        "Time Saved": format_time_hours(time_saved),
+                        "Speedup": f"{speedup:.1f}x"
+                    })
+                
+                scenario_detailed_calc_df = pd.DataFrame(scenario_detailed_calc_data)
+                st.dataframe(scenario_detailed_calc_df, hide_index=True, use_container_width=True, height=400)
+                
+                # Add explanation
+                st.info(f"""
+                **📐 Calculation Steps for Each Carrier (with Tier Multipliers):**
+                1. **Total PDFs** = Cases × {metrics["lambda_pdfs_per_case"]:.4f} PDFs/case × Tier Multiplier (0.5x/1.0x/1.5x)
+                2. **Machine PDFs** = Total PDFs × {(1-p_scanned)*100:.1f}%, **Scanned PDFs** = Total PDFs × {p_scanned*100:.1f}%
+                3. **Automated Time** = (Machine PDFs × {avg_time_machine_seconds} sec) + (Scanned PDFs × {avg_time_scanned_seconds} sec)
+                4. **Human Time** = (Cases × {human_time_per_case} sec) + (Total PDFs × {human_time_per_pdf} sec)
+                5. **Time Saved** = Human Time - Automated Time
+                """)
+                
+                # Download detailed calculations
+                col1, col2 = st.columns(2)
+                with col1:
+                    scenario_detailed_csv = scenario_detailed_calc_df.to_csv(index=False)
+                    st.download_button(
+                        label="📥 Download Scenario Calculations (CSV)",
+                        data=scenario_detailed_csv,
+                        file_name="scenario_detailed_calculations.csv",
+                        mime="text/csv",
+                        use_container_width=True
+                    )
+                with col2:
+                    scenario_detailed_buffer = io.BytesIO()
+                    with pd.ExcelWriter(scenario_detailed_buffer, engine='openpyxl') as writer:
+                        scenario_detailed_calc_df.to_excel(writer, index=False, sheet_name='Scenario Calculations')
+                    scenario_detailed_buffer.seek(0)
+                    st.download_button(
+                        label="📥 Download Scenario Calculations (Excel)",
+                        data=scenario_detailed_buffer,
+                        file_name="scenario_detailed_calculations.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        use_container_width=True
+                    )
 
                 # Create stacked bar chart showing carrier distribution by tier
                 if len(scenario_bucket_df) > 0:
