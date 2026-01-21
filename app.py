@@ -1134,29 +1134,52 @@ def main():
             st.markdown("**Human vs Automated Processing Time Comparison**")
             comparison_data = []
             for row in pdf_stats_data:
-                auto_total = row['_avg_time']
-                human_total = row['_avg_human_time']
-                time_saved = human_total - auto_total
-                speedup = human_total / auto_total if auto_total > 0 else 0
+                auto_avg = row['_avg_time']
+                auto_min = row['_min_time']
+                auto_max = row['_max_time']
+                human_avg = row['_avg_human_time']
+                human_min = row['_min_human_time']
+                human_max = row['_max_human_time']
+                time_saved = human_avg - auto_avg
+                speedup = human_avg / auto_avg if auto_avg > 0 else 0
 
                 comparison_data.append({
                     "Case Range": row['Case Range'],
                     "Carriers": row['Carriers'],
+                    "Min PDFs": row['Min PDFs'],
+                    "Max PDFs": row['Max PDFs'],
                     "Avg PDFs": row['Avg PDFs'],
-                    "Automated Time (Avg)": format_time_hours(auto_total),
-                    "Human Time (Avg)": format_time_hours(human_total),
+                    "Min Automated Time": format_time_hours(auto_min),
+                    "Max Automated Time": format_time_hours(auto_max),
+                    "Avg Automated Time": format_time_hours(auto_avg),
+                    "Min Human Time": format_time_hours(human_min),
+                    "Max Human Time": format_time_hours(human_max),
+                    "Avg Human Time": format_time_hours(human_avg),
                     "Time Saved (Avg)": format_time_hours(time_saved),
                     "Speedup": f"{speedup:.1f}x",
                     "Total Automated": format_time_hours(row['_avg_time'] * row['Carriers']),
                     "Total Human": format_time_hours(row['_avg_human_time'] * row['Carriers']),
                     # Hidden columns for chart
-                    "_auto_hrs": auto_total / 3600,
-                    "_human_hrs": human_total / 3600
+                    "_auto_hrs": auto_avg / 3600,
+                    "_human_hrs": human_avg / 3600
                 })
 
             comparison_df = pd.DataFrame(comparison_data)
             display_cols = [col for col in comparison_df.columns if not col.startswith('_')]
             st.dataframe(comparison_df[display_cols], hide_index=True, use_container_width=True)
+            
+            # Add user-friendly formula explanation
+            st.info(f"""
+            **📐 How Human Processing Time is Calculated:**
+            
+            For each carrier:
+            - **Human Processing Time** = (Number of Cases × {human_time_per_case} sec/case) + (Number of PDFs × {human_time_per_pdf} sec/PDF)
+            
+            **Example:** A carrier with 100 cases and 200 PDFs would take:
+            - (100 cases × {human_time_per_case} sec) + (200 PDFs × {human_time_per_pdf} sec) = **{(100 * human_time_per_case + 200 * human_time_per_pdf):.0f} seconds** = **{format_time_hours(100 * human_time_per_case + 200 * human_time_per_pdf)}**
+            
+            💡 *You can adjust the human review times in the sidebar to model different scenarios.*
+            """)
 
             # Create comparison bar chart
             fig_compare = go.Figure()
@@ -1540,28 +1563,51 @@ def main():
                     st.markdown("**Human vs Automated Processing Time Comparison (Scenario)**")
                     scenario_comparison_data = []
                     for row in scenario_pdf_stats_data:
-                        auto_total = row['_avg_time']
-                        human_total = row['_avg_human_time']
-                        time_saved = human_total - auto_total
-                        speedup = human_total / auto_total if auto_total > 0 else 0
+                        auto_avg = row['_avg_time']
+                        auto_min = row['_min_time']
+                        auto_max = row['_max_time']
+                        human_avg = row['_avg_human_time']
+                        human_min = row['_min_human_time']
+                        human_max = row['_max_human_time']
+                        time_saved = human_avg - auto_avg
+                        speedup = human_avg / auto_avg if auto_avg > 0 else 0
 
                         scenario_comparison_data.append({
                             "Case Range": row['Case Range'],
                             "Carriers": row['Carriers'],
+                            "Min PDFs": row['Min PDFs'],
+                            "Max PDFs": row['Max PDFs'],
                             "Avg PDFs": row['Avg PDFs'],
-                            "Automated Time (Avg)": format_time_hours(auto_total),
-                            "Human Time (Avg)": format_time_hours(human_total),
+                            "Min Automated Time": format_time_hours(auto_min),
+                            "Max Automated Time": format_time_hours(auto_max),
+                            "Avg Automated Time": format_time_hours(auto_avg),
+                            "Min Human Time": format_time_hours(human_min),
+                            "Max Human Time": format_time_hours(human_max),
+                            "Avg Human Time": format_time_hours(human_avg),
                             "Time Saved (Avg)": format_time_hours(time_saved),
                             "Speedup": f"{speedup:.1f}x",
                             "Total Automated": format_time_hours(row['_avg_time'] * row['Carriers']),
                             "Total Human": format_time_hours(row['_avg_human_time'] * row['Carriers']),
-                            "_auto_hrs": auto_total / 3600,
-                            "_human_hrs": human_total / 3600
+                            "_auto_hrs": auto_avg / 3600,
+                            "_human_hrs": human_avg / 3600
                         })
 
                     scenario_comparison_df = pd.DataFrame(scenario_comparison_data)
                     display_cols = [col for col in scenario_comparison_df.columns if not col.startswith('_')]
                     st.dataframe(scenario_comparison_df[display_cols], hide_index=True, use_container_width=True)
+                    
+                    # Add user-friendly formula explanation
+                    st.info(f"""
+                    **📐 How Human Processing Time is Calculated:**
+                    
+                    For each carrier:
+                    - **Human Processing Time** = (Number of Cases × {human_time_per_case} sec/case) + (Number of PDFs × {human_time_per_pdf} sec/PDF)
+                    
+                    **Example:** A carrier with 100 cases and 200 PDFs would take:
+                    - (100 cases × {human_time_per_case} sec) + (200 PDFs × {human_time_per_pdf} sec) = **{(100 * human_time_per_case + 200 * human_time_per_pdf):.0f} seconds** = **{format_time_hours(100 * human_time_per_case + 200 * human_time_per_pdf)}**
+                    
+                    💡 *You can adjust the human review times in the sidebar to model different scenarios.*
+                    """)
 
                     # Create comparison bar chart
                     fig_compare = go.Figure()
