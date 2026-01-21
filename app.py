@@ -958,18 +958,31 @@ def main():
 
             if len(bucket_carriers) > 0:
                 total_pdfs_p50 = bucket_carriers['_total_pdfs_p50']
+                # Calculate total processing time for each carrier (machine + scanned)
+                total_time_per_carrier = bucket_carriers['_machine_time_p50'] + bucket_carriers['_scanned_time_p50']
+                
                 pdf_stats_data.append({
                     "Case Range": create_bucket_label(min_val, max_val),
                     "Carriers": len(bucket_carriers),
                     "Min PDFs": f"{total_pdfs_p50.min():.0f}",
                     "Max PDFs": f"{total_pdfs_p50.max():.0f}",
-                    "Avg PDFs": f"{total_pdfs_p50.mean():.0f}"
+                    "Avg PDFs": f"{total_pdfs_p50.mean():.0f}",
+                    "Min Processing Time": format_time_hours(total_time_per_carrier.min()),
+                    "Max Processing Time": format_time_hours(total_time_per_carrier.max()),
+                    "Avg Processing Time": format_time_hours(total_time_per_carrier.mean()),
+                    "Total Processing Time": format_time_hours(total_time_per_carrier.sum()),
+                    # Store numeric values for charting
+                    "_min_time": total_time_per_carrier.min(),
+                    "_max_time": total_time_per_carrier.max(),
+                    "_avg_time": total_time_per_carrier.mean()
                 })
 
         if pdf_stats_data:
             st.markdown("**PDF Statistics by Case Bucket**")
             pdf_stats_df = pd.DataFrame(pdf_stats_data)
-            st.dataframe(pdf_stats_df, hide_index=True, use_container_width=True)
+            # Display table without hidden columns
+            display_columns = [col for col in pdf_stats_df.columns if not col.startswith('_')]
+            st.dataframe(pdf_stats_df[display_columns], hide_index=True, use_container_width=True)
 
             # Create grouped bar chart for Min/Max/Avg PDFs
             fig = go.Figure()
@@ -1006,6 +1019,43 @@ def main():
                 )
             )
             st.plotly_chart(fig, use_container_width=True)
+
+            # Create grouped bar chart for Min/Max/Avg Processing Time
+            st.markdown("**Processing Time Statistics by Case Bucket**")
+            fig_time = go.Figure()
+            fig_time.add_trace(go.Bar(
+                name='Min Time',
+                x=pdf_stats_df['Case Range'],
+                y=pdf_stats_df['_min_time'] / 3600,  # Convert to hours for chart
+                marker_color='#3498db'
+            ))
+            fig_time.add_trace(go.Bar(
+                name='Avg Time',
+                x=pdf_stats_df['Case Range'],
+                y=pdf_stats_df['_avg_time'] / 3600,  # Convert to hours for chart
+                marker_color='#2ecc71'
+            ))
+            fig_time.add_trace(go.Bar(
+                name='Max Time',
+                x=pdf_stats_df['Case Range'],
+                y=pdf_stats_df['_max_time'] / 3600,  # Convert to hours for chart
+                marker_color='#e74c3c'
+            ))
+            fig_time.update_layout(
+                barmode='group',
+                xaxis_title="Case Range",
+                yaxis_title="Processing Time (hours)",
+                height=350,
+                margin=dict(t=20, b=40, l=40, r=20),
+                legend=dict(
+                    orientation="h",
+                    yanchor="bottom",
+                    y=1.02,
+                    xanchor="right",
+                    x=1
+                )
+            )
+            st.plotly_chart(fig_time, use_container_width=True)
 
         # Create carrier distribution bar chart
         if len(bucket_summary_df) > 0:
@@ -1249,18 +1299,31 @@ def main():
 
                     if len(bucket_carriers) > 0:
                         total_pdfs_p50 = bucket_carriers['_total_pdfs_p50']
+                        # Calculate total processing time for each carrier (machine + scanned)
+                        total_time_per_carrier = bucket_carriers['_machine_time_p50'] + bucket_carriers['_scanned_time_p50']
+                        
                         scenario_pdf_stats_data.append({
                             "Case Range": create_bucket_label(min_val, max_val),
                             "Carriers": len(bucket_carriers),
                             "Min PDFs": f"{total_pdfs_p50.min():.0f}",
                             "Max PDFs": f"{total_pdfs_p50.max():.0f}",
-                            "Avg PDFs": f"{total_pdfs_p50.mean():.0f}"
+                            "Avg PDFs": f"{total_pdfs_p50.mean():.0f}",
+                            "Min Processing Time": format_time_hours(total_time_per_carrier.min()),
+                            "Max Processing Time": format_time_hours(total_time_per_carrier.max()),
+                            "Avg Processing Time": format_time_hours(total_time_per_carrier.mean()),
+                            "Total Processing Time": format_time_hours(total_time_per_carrier.sum()),
+                            # Store numeric values for charting
+                            "_min_time": total_time_per_carrier.min(),
+                            "_max_time": total_time_per_carrier.max(),
+                            "_avg_time": total_time_per_carrier.mean()
                         })
 
                 if scenario_pdf_stats_data:
                     st.markdown("**PDF Statistics by Case Bucket (Scenario)**")
                     scenario_pdf_stats_df = pd.DataFrame(scenario_pdf_stats_data)
-                    st.dataframe(scenario_pdf_stats_df, hide_index=True, use_container_width=True)
+                    # Display table without hidden columns
+                    display_columns = [col for col in scenario_pdf_stats_df.columns if not col.startswith('_')]
+                    st.dataframe(scenario_pdf_stats_df[display_columns], hide_index=True, use_container_width=True)
 
                     # Create grouped bar chart for Min/Max/Avg PDFs (Scenario)
                     fig = go.Figure()
@@ -1297,6 +1360,43 @@ def main():
                         )
                     )
                     st.plotly_chart(fig, use_container_width=True)
+
+                    # Create grouped bar chart for Min/Max/Avg Processing Time (Scenario)
+                    st.markdown("**Processing Time Statistics by Case Bucket (Scenario)**")
+                    fig_time = go.Figure()
+                    fig_time.add_trace(go.Bar(
+                        name='Min Time',
+                        x=scenario_pdf_stats_df['Case Range'],
+                        y=scenario_pdf_stats_df['_min_time'] / 3600,  # Convert to hours for chart
+                        marker_color='#3498db'
+                    ))
+                    fig_time.add_trace(go.Bar(
+                        name='Avg Time',
+                        x=scenario_pdf_stats_df['Case Range'],
+                        y=scenario_pdf_stats_df['_avg_time'] / 3600,  # Convert to hours for chart
+                        marker_color='#2ecc71'
+                    ))
+                    fig_time.add_trace(go.Bar(
+                        name='Max Time',
+                        x=scenario_pdf_stats_df['Case Range'],
+                        y=scenario_pdf_stats_df['_max_time'] / 3600,  # Convert to hours for chart
+                        marker_color='#e74c3c'
+                    ))
+                    fig_time.update_layout(
+                        barmode='group',
+                        xaxis_title="Case Range",
+                        yaxis_title="Processing Time (hours)",
+                        height=350,
+                        margin=dict(t=20, b=40, l=40, r=20),
+                        legend=dict(
+                            orientation="h",
+                            yanchor="bottom",
+                            y=1.02,
+                            xanchor="right",
+                            x=1
+                        )
+                    )
+                    st.plotly_chart(fig_time, use_container_width=True)
 
                 # Create stacked bar chart showing carrier distribution by tier
                 if len(scenario_bucket_df) > 0:
