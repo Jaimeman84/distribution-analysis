@@ -4,112 +4,334 @@ This document provides detailed technical explanations of the calculations, stat
 
 ## Table of Contents
 
-1. [Statistical Concepts](#statistical-concepts)
-2. [Calculation Flow](#calculation-flow)
-3. [Table Calculations](#table-calculations)
-4. [Processing Time Calculations](#processing-time-calculations)
-5. [Scenario Analysis](#scenario-analysis)
+1. [Executive Summary](#executive-summary)
+2. [Core Formulas](#core-formulas)
+3. [Statistical Concepts](#statistical-concepts)
+4. [Step-by-Step Calculation Examples](#step-by-step-calculation-examples)
+5. [Excel Formulas](#excel-formulas)
+6. [Table Calculations](#table-calculations)
+7. [Scenario Analysis](#scenario-analysis)
+8. [Data Flow Diagram](#data-flow-diagram)
+9. [Reference Tables](#reference-tables)
+
+---
+
+## Executive Summary
+
+This application forecasts PDF processing workload for multiple carriers using **benchmark data from one known carrier (Carrier A)**. The key insight is:
+
+> If we know the PDF-to-case ratio from Carrier A, we can estimate PDFs for any carrier based solely on their case count.
+
+**The Core Question**: *"If Carrier A has X PDFs per case, how many PDFs will Carrier B have with Y cases?"*
+
+---
+
+## Core Formulas
+
+### The Three Key Metrics (from Carrier A Benchmark)
+
+| Metric | Formula | What It Means |
+|--------|---------|---------------|
+| **λ (Lambda)** | `Total PDFs ÷ Total Cases` | Average PDFs per case |
+| **Scanned Ratio** | `Scanned PDFs ÷ Total PDFs` | Percentage of PDFs requiring OCR |
+| **Machine Ratio** | `Machine PDFs ÷ Total PDFs` | Percentage of machine-readable PDFs |
+
+**Default Benchmark Values (Carrier A):**
+```
+Cases:        984
+Total PDFs:   197
+Machine PDFs: 167
+Scanned PDFs: 30
+
+λ = 197 ÷ 984 = 0.2003 PDFs per case
+Scanned Ratio = 30 ÷ 197 = 15.23%
+Machine Ratio = 167 ÷ 197 = 84.77%
+```
+
+### The Processing Time Formula
+
+**For any carrier, the total processing time is:**
+
+```
+Total Processing Time = (Machine PDFs × Machine Time per PDF) + (Scanned PDFs × Scanned Time per PDF)
+```
+
+Or more specifically:
+
+```
+Total Time (seconds) = (Total PDFs × Machine Ratio × 1.45) + (Total PDFs × Scanned Ratio × 20.0)
+```
+
+**Where:**
+- `1.45 seconds` = Average time to process one machine-readable PDF
+- `20.0 seconds` = Average time to process one scanned PDF (OCR required)
+
+### Simplified Single Formula
+
+For quick estimates, you can combine everything:
+
+```
+Total Time (seconds) = Cases × λ × [(Machine Ratio × 1.45) + (Scanned Ratio × 20.0)]
+```
+
+With default values:
+```
+Total Time (seconds) = Cases × 0.2003 × [(0.8477 × 1.45) + (0.1523 × 20.0)]
+Total Time (seconds) = Cases × 0.2003 × [1.229 + 3.046]
+Total Time (seconds) = Cases × 0.2003 × 4.275
+Total Time (seconds) = Cases × 0.856
+```
+
+**Quick Rule of Thumb**: Each case takes approximately **0.86 seconds** to process (with default benchmark values).
 
 ---
 
 ## Statistical Concepts
 
+### Why We Use Monte Carlo Simulation
+
+Instead of just multiplying `Cases × λ`, we run thousands of simulations because:
+
+1. **Real-world variability**: Not every case has exactly the same number of PDFs
+2. **Statistical distributions**: PDF counts follow a Poisson distribution (appropriate for count data)
+3. **Confidence ranges**: Simulations give us P10-P90 ranges, not just single estimates
+
 ### P50 (Median / 50th Percentile)
 
-**P50** is the median value where 50% of simulated values fall below and 50% fall above. It's used throughout this application as the primary measure of central tendency.
+**P50** is the median value where 50% of simulated values fall below and 50% fall above.
 
 **Why P50 instead of Mean?**
 
-The median (P50) is more robust to outliers than the mean. In Monte Carlo simulations with Poisson distributions, occasional extreme values can skew the average, so P50 gives a more representative "typical" value.
+The median (P50) is more robust to outliers than the mean:
 
-**Example:**
 ```
 Simulation results: [45, 47, 48, 49, 50, 50, 51, 52, 53, 200]
 - Mean = 64.5 (pulled up by the outlier 200)
 - P50 (Median) = 50 (unaffected by the outlier)
 ```
 
-### Other Percentiles Used
+### Percentile Reference
 
 | Percentile | Description | Use Case |
 |------------|-------------|----------|
-| P10 | 10% of values fall below | Lower bound estimate |
-| P50 | 50% of values fall below (median) | Typical/expected value |
-| P90 | 90% of values fall below | Upper bound / planning buffer |
-| P95 | 95% of values fall below | Conservative / worst-case estimate |
+| P10 | 10% of values fall below | Optimistic / best-case estimate |
+| P50 | 50% of values fall below (median) | **Typical / expected value** |
+| P90 | 90% of values fall below | Planning buffer / conservative estimate |
+| P95 | 95% of values fall below | Worst-case scenario planning |
 
 ### Poisson Distribution
 
-Used to model the number of PDFs per case. The Poisson distribution is appropriate for count data where events occur independently at a constant average rate.
+Used to model total PDFs per carrier. Appropriate for count data where events occur independently.
 
-**Parameter:**
-- λ (lambda) = Total PDFs / Total Cases from Carrier A benchmark
-
-**Formula:**
-```
-Expected PDFs for Carrier X = Carrier X Cases × λ
+```python
+expected_pdfs = cases × λ
+actual_pdfs = Poisson(λ = expected_pdfs)  # Simulated value
 ```
 
 ### Binomial Distribution
 
-Used to determine how many PDFs are scanned vs. machine-readable.
-
-**Parameters:**
-- n = Total number of PDFs (from Poisson simulation)
-- p = Probability of a PDF being scanned (from Carrier A: Scanned PDFs / Total PDFs)
-
----
-
-## Calculation Flow
-
-### Step 1: Benchmark Metrics (from Carrier A)
+Used to split total PDFs into scanned vs. machine-readable:
 
 ```python
-lambda_pdfs_per_case = carrierA_total_pdfs / carrierA_cases
-p_scanned = carrierA_scanned_pdfs / carrierA_total_pdfs
-p_machine = 1 - p_scanned
-```
-
-**Example:**
-- Carrier A: 984 cases, 197 total PDFs, 30 scanned, 167 machine-readable
-- λ = 197 / 984 = 0.20 PDFs per case
-- p_scanned = 30 / 197 = 15.2%
-- p_machine = 167 / 197 = 84.8%
-
-### Step 2: Monte Carlo Simulation (per carrier)
-
-For each carrier, the simulation runs N times (default: 1,000 for multi-carrier):
-
-```python
-# 1. Sample total PDFs using Poisson distribution
-expected_pdfs = carrier_cases × lambda_pdfs_per_case
-total_pdfs = np.random.poisson(lam=expected_pdfs, size=simulations)
-
-# 2. Sample scanned PDFs using Binomial distribution
-scanned_pdfs = np.random.binomial(n=total_pdfs, p=p_scanned)
-
-# 3. Calculate machine PDFs
+scanned_pdfs = Binomial(n = total_pdfs, p = scanned_ratio)
 machine_pdfs = total_pdfs - scanned_pdfs
 ```
 
-### Step 3: Calculate Percentiles
+---
 
-After simulation, percentiles are calculated:
+## Step-by-Step Calculation Examples
 
-```python
-total_pdfs_p50 = np.percentile(sim_results["total_pdfs"], 50)
-machine_pdfs_p50 = np.percentile(sim_results["machine_pdfs"], 50)
-scanned_pdfs_p50 = np.percentile(sim_results["scanned_pdfs"], 50)
+### Example Data from carriers_1.21.xlsx
+
+The file contains **2,132 carriers** with a total of **1,141,039 cases**.
+
+| Carrier ID | Cases | Description |
+|------------|-------|-------------|
+| 722 | 50 | Small carrier |
+| 330 | 200 | Medium carrier |
+| 3140 | 999 | Medium-large carrier |
+| 6027 | 9,841 | Large carrier |
+| 2169 | 52,631 | Very large carrier |
+
+---
+
+### Example 1: Small Carrier (Carrier 722 - 50 cases)
+
+**Step 1: Estimate Total PDFs**
+```
+Total PDFs = Cases × λ
+Total PDFs = 50 × 0.2003
+Total PDFs = 10.02 ≈ 10 PDFs
 ```
 
-### Step 4: Calculate Processing Times
-
-Processing times are derived from the median PDF counts:
-
-```python
-machine_time_seconds_p50 = machine_pdfs_p50 × avg_time_machine_seconds
-scanned_time_seconds_p50 = scanned_pdfs_p50 × avg_time_scanned_seconds
+**Step 2: Split by Type**
 ```
+Machine PDFs = Total PDFs × Machine Ratio
+Machine PDFs = 10 × 0.8477 = 8.48 ≈ 8 PDFs
+
+Scanned PDFs = Total PDFs × Scanned Ratio
+Scanned PDFs = 10 × 0.1523 = 1.52 ≈ 2 PDFs
+```
+
+**Step 3: Calculate Processing Time**
+```
+Machine Time = Machine PDFs × 1.45 seconds
+Machine Time = 8 × 1.45 = 11.6 seconds
+
+Scanned Time = Scanned PDFs × 20.0 seconds
+Scanned Time = 2 × 20.0 = 40.0 seconds
+
+Total Time = 11.6 + 40.0 = 51.6 seconds ≈ 0.9 minutes
+```
+
+---
+
+### Example 2: Medium Carrier (Carrier 330 - 200 cases)
+
+**Step 1: Estimate Total PDFs**
+```
+Total PDFs = 200 × 0.2003 = 40.06 ≈ 40 PDFs
+```
+
+**Step 2: Split by Type**
+```
+Machine PDFs = 40 × 0.8477 = 33.9 ≈ 34 PDFs
+Scanned PDFs = 40 × 0.1523 = 6.1 ≈ 6 PDFs
+```
+
+**Step 3: Calculate Processing Time**
+```
+Machine Time = 34 × 1.45 = 49.3 seconds
+Scanned Time = 6 × 20.0 = 120.0 seconds
+
+Total Time = 49.3 + 120.0 = 169.3 seconds ≈ 2.8 minutes
+```
+
+---
+
+### Example 3: Large Carrier (Carrier 6027 - 9,841 cases)
+
+**Step 1: Estimate Total PDFs**
+```
+Total PDFs = 9,841 × 0.2003 = 1,971.2 ≈ 1,971 PDFs
+```
+
+**Step 2: Split by Type**
+```
+Machine PDFs = 1,971 × 0.8477 = 1,671.2 ≈ 1,671 PDFs
+Scanned PDFs = 1,971 × 0.1523 = 300.2 ≈ 300 PDFs
+```
+
+**Step 3: Calculate Processing Time**
+```
+Machine Time = 1,671 × 1.45 = 2,422.95 seconds
+Scanned Time = 300 × 20.0 = 6,000.0 seconds
+
+Total Time = 2,422.95 + 6,000.0 = 8,422.95 seconds
+Total Time = 8,422.95 ÷ 3600 = 2.34 hours
+```
+
+---
+
+### Example 4: Very Large Carrier (Carrier 2169 - 52,631 cases)
+
+**Step 1: Estimate Total PDFs**
+```
+Total PDFs = 52,631 × 0.2003 = 10,541.9 ≈ 10,542 PDFs
+```
+
+**Step 2: Split by Type**
+```
+Machine PDFs = 10,542 × 0.8477 = 8,936.5 ≈ 8,937 PDFs
+Scanned PDFs = 10,542 × 0.1523 = 1,605.5 ≈ 1,606 PDFs
+```
+
+**Step 3: Calculate Processing Time**
+```
+Machine Time = 8,937 × 1.45 = 12,958.65 seconds
+Scanned Time = 1,606 × 20.0 = 32,120.0 seconds
+
+Total Time = 12,958.65 + 32,120.0 = 45,078.65 seconds
+Total Time = 45,078.65 ÷ 3600 = 12.52 hours
+```
+
+---
+
+### Example 5: Full Dataset Calculation (2,132 carriers, 1,141,039 cases)
+
+**Step 1: Estimate Total PDFs (All Carriers)**
+```
+Total PDFs = 1,141,039 × 0.2003 = 228,550.1 ≈ 228,550 PDFs
+```
+
+**Step 2: Split by Type**
+```
+Machine PDFs = 228,550 × 0.8477 = 193,760.4 ≈ 193,760 PDFs
+Scanned PDFs = 228,550 × 0.1523 = 34,808.3 ≈ 34,808 PDFs
+```
+
+**Step 3: Calculate Processing Time**
+```
+Machine Time = 193,760 × 1.45 = 280,952 seconds
+Scanned Time = 34,808 × 20.0 = 696,160 seconds
+
+Total Time = 280,952 + 696,160 = 977,112 seconds
+Total Time = 977,112 ÷ 3600 = 271.4 hours
+Total Time = 271.4 ÷ 24 = 11.3 days (continuous processing)
+```
+
+---
+
+## Excel Formulas
+
+Use these formulas in Excel to calculate processing times for any carrier.
+
+### Setup: Define Constants (Reference Cells)
+
+| Cell | Value | Description |
+|------|-------|-------------|
+| B1 | 0.2003 | λ (Lambda) - PDFs per case |
+| B2 | 0.8477 | Machine Ratio |
+| B3 | 0.1523 | Scanned Ratio |
+| B4 | 1.45 | Machine Time (seconds per PDF) |
+| B5 | 20.0 | Scanned Time (seconds per PDF) |
+
+### Formulas for Carrier Data (Cases in Column A, starting row 8)
+
+| Column | Header | Formula (Row 8) | Description |
+|--------|--------|-----------------|-------------|
+| A | Cases | *(input data)* | Number of cases |
+| B | Est. Total PDFs | `=A8*$B$1` | Cases × λ |
+| C | Est. Machine PDFs | `=B8*$B$2` | Total PDFs × Machine Ratio |
+| D | Est. Scanned PDFs | `=B8*$B$3` | Total PDFs × Scanned Ratio |
+| E | Machine Time (sec) | `=C8*$B$4` | Machine PDFs × 1.45 |
+| F | Scanned Time (sec) | `=D8*$B$5` | Scanned PDFs × 20.0 |
+| G | Total Time (sec) | `=E8+F8` | Machine Time + Scanned Time |
+| H | Total Time (min) | `=G8/60` | Seconds ÷ 60 |
+| I | Total Time (hrs) | `=G8/3600` | Seconds ÷ 3600 |
+
+### Single-Cell Formula (All-in-One)
+
+To calculate total processing time in hours from just the case count:
+
+```excel
+=A8*0.2003*((0.8477*1.45)+(0.1523*20))/3600
+```
+
+Or with cell references:
+```excel
+=A8*$B$1*(($B$2*$B$4)+($B$3*$B$5))/3600
+```
+
+### Excel Example Table
+
+| Cases | Total PDFs | Machine PDFs | Scanned PDFs | Machine Time | Scanned Time | Total Time | Hours |
+|-------|------------|--------------|--------------|--------------|--------------|------------|-------|
+| 50 | 10 | 8 | 2 | 12 sec | 30 sec | 43 sec | 0.01 hrs |
+| 200 | 40 | 34 | 6 | 49 sec | 120 sec | 169 sec | 0.05 hrs |
+| 1,000 | 200 | 170 | 30 | 246 sec | 609 sec | 856 sec | 0.24 hrs |
+| 10,000 | 2,003 | 1,698 | 305 | 2,462 sec | 6,095 sec | 8,557 sec | 2.38 hrs |
+| 52,631 | 10,542 | 8,937 | 1,606 | 12,959 sec | 32,110 sec | 45,068 sec | 12.52 hrs |
 
 ---
 
@@ -117,135 +339,97 @@ scanned_time_seconds_p50 = scanned_pdfs_p50 × avg_time_scanned_seconds
 
 ### PDF Statistics by Case Bucket
 
-This table shows Min/Max/Avg statistics for carriers grouped by case ranges.
+This table groups carriers by case ranges and shows statistics.
 
 | Column | Calculation | Description |
 |--------|-------------|-------------|
 | Case Range | Bucket boundaries | e.g., "1-50", "51-100" |
-| Carriers | `len(bucket_carriers)` | Count of carriers in bucket |
-| Min PDFs | `total_pdfs_p50.min()` | Lowest median PDFs among carriers in bucket |
-| Max PDFs | `total_pdfs_p50.max()` | Highest median PDFs among carriers in bucket |
-| Avg PDFs | `total_pdfs_p50.mean()` | Average of median PDFs across carriers in bucket |
-| Min Processing Time | `total_time_per_carrier.min()` | Shortest processing time among carriers |
-| Max Processing Time | `total_time_per_carrier.max()` | Longest processing time among carriers |
-| Avg Processing Time | `total_time_per_carrier.mean()` | Average processing time across carriers |
-| Total Processing Time | `total_time_per_carrier.sum()` | **Sum of all carrier processing times in bucket** |
+| Carriers | `count(carriers in bucket)` | Number of carriers in range |
+| Min PDFs | `min(all P50 PDFs in bucket)` | Lowest median PDFs among carriers |
+| Max PDFs | `max(all P50 PDFs in bucket)` | Highest median PDFs among carriers |
+| Avg PDFs | `mean(all P50 PDFs in bucket)` | Average of median PDFs |
+| Min Processing Time | `min(all carrier times)` | Fastest carrier in bucket |
+| Max Processing Time | `max(all carrier times)` | Slowest carrier in bucket |
+| Avg Processing Time | `mean(all carrier times)` | Average time per carrier |
+| Total Processing Time | `sum(all carrier times)` | **Combined workload for bucket** |
 
-### Important Note: Min/Max Independence
+### Important: Min/Max Independence
 
-The Min and Max values for different columns come from **different carriers** and are calculated independently:
+The Min and Max values for different columns come from **different carriers**:
 
 ```
-Bucket "1-50 cases" with 3 carriers:
-- Carrier A: 10 PDFs, 5 machine, 5 scanned
-- Carrier B: 15 PDFs, 12 machine, 3 scanned
-- Carrier C: 8 PDFs, 6 machine, 2 scanned
+Example Bucket "1-50 cases" with 3 carriers:
+- Carrier A: 10 PDFs (8 machine + 2 scanned) → 52 sec
+- Carrier B: 15 PDFs (12 machine + 3 scanned) → 77 sec
+- Carrier C: 8 PDFs (6 machine + 2 scanned) → 49 sec
 
-Min PDFs = 8 (from Carrier C)
-Max PDFs = 15 (from Carrier B)
-Min Machine PDFs = 5 (from Carrier A)
-Max Machine PDFs = 12 (from Carrier B)
-Min Scanned PDFs = 2 (from Carrier C)
-Max Scanned PDFs = 5 (from Carrier A)
+Results:
+- Min PDFs = 8 (Carrier C)
+- Max PDFs = 15 (Carrier B)
+- Min Time = 49 sec (Carrier C)
+- Max Time = 77 sec (Carrier B)
+- Total Time = 52 + 77 + 49 = 178 sec (sum of all)
 ```
 
-This means: **Machine PDF Range + Scanned PDF Range ≠ PDF Range**
+**Note**: Min Machine + Min Scanned ≠ Min Total because they may come from different carriers.
 
-This is expected behavior because the min/max values for each column are independent.
+### Single-Carrier Buckets
 
----
+When a bucket has only **1 carrier**, Min = Max = Avg because there's only one data point:
 
-## Processing Time Calculations
-
-### Per-Carrier Processing Time
-
-Each carrier's total processing time is:
-
-```python
-total_time_per_carrier = machine_time_p50 + scanned_time_p50
 ```
+Bucket "50,001-100,000" with 1 carrier (52,631 cases):
+- Min PDFs = 10,542
+- Max PDFs = 10,542
+- Avg PDFs = 10,542
+- Processing Time = 12.52 hrs
 
-Where:
-- `machine_time_p50 = machine_pdfs_p50 × avg_time_machine_seconds`
-- `scanned_time_p50 = scanned_pdfs_p50 × avg_time_scanned_seconds`
-
-### Bucket-Level Statistics
-
-| Metric | Formula | Description |
-|--------|---------|-------------|
-| Min Processing Time | `min(all carrier times in bucket)` | Fastest carrier |
-| Max Processing Time | `max(all carrier times in bucket)` | Slowest carrier |
-| Avg Processing Time | `mean(all carrier times in bucket)` | Average per carrier |
-| Total Processing Time | `sum(all carrier times in bucket)` | **Aggregate workload for bucket** |
-
-### Example Calculation
-
-**Benchmark:**
-- Avg machine PDF processing: 1.45 seconds
-- Avg scanned PDF processing: 20.0 seconds
-
-**Carrier X (50 cases):**
-- Median machine PDFs: 42
-- Median scanned PDFs: 8
-- Machine time: 42 × 1.45 = 60.9 seconds
-- Scanned time: 8 × 20.0 = 160.0 seconds
-- **Total time: 220.9 seconds = 3.68 minutes**
+This is expected behavior, not an error.
+```
 
 ---
 
 ## Scenario Analysis
 
+### Purpose
+
+Scenario analysis models **carrier variability** - the fact that different carriers may have more or fewer PDFs per case than the benchmark.
+
 ### Tier System
 
-Scenario analysis models carrier variability by assigning carriers to volume tiers:
+| Tier | Multiplier | Adjusted λ | Description |
+|------|------------|------------|-------------|
+| Low | 0.5x | 0.1001 | 50% fewer PDFs per case |
+| Same | 1.0x | 0.2003 | Matches Carrier A benchmark |
+| High | 1.5x | 0.3004 | 50% more PDFs per case |
 
-| Tier | Multiplier | Description |
-|------|------------|-------------|
-| Low | 0.5x | 50% fewer PDFs per case than benchmark |
-| Same | 1.0x | Matches Carrier A benchmark |
-| High | 1.5x | 50% more PDFs per case than benchmark |
+### Tier Assignment Example
 
-### Tier Assignment
-
-Carriers are randomly assigned based on configured percentages:
-
-```python
-# Example: 33% Low, 33% Same, 34% High
-tier_assignments = assign_carriers_to_tiers(
-    num_carriers=500,
-    tier_low_pct=33,
-    tier_same_pct=33,
-    tier_high_pct=34,
-    random_seed=42  # Fixed for reproducibility
-)
+With 2,132 carriers and 33%/33%/34% split:
+```
+Low Tier (33%):  704 carriers using λ = 0.1001
+Same Tier (33%): 704 carriers using λ = 0.2003
+High Tier (34%): 724 carriers using λ = 0.3004
 ```
 
-### Adjusted Lambda
+### Impact on Processing Time
 
-For scenario analysis, the λ (PDFs per case) is adjusted by the tier multiplier:
+**Carrier with 1,000 cases:**
 
-```python
-adjusted_lambda = lambda_pdfs_per_case × tier_multiplier
-```
+| Tier | λ | Total PDFs | Processing Time |
+|------|---|------------|-----------------|
+| Low (0.5x) | 0.1001 | 100 | 7.1 min |
+| Same (1.0x) | 0.2003 | 200 | 14.3 min |
+| High (1.5x) | 0.3004 | 300 | 21.4 min |
 
-**Example:**
-- Base λ = 0.20 PDFs/case
-- Low tier carrier: λ = 0.20 × 0.5 = 0.10 PDFs/case
-- Same tier carrier: λ = 0.20 × 1.0 = 0.20 PDFs/case
-- High tier carrier: λ = 0.20 × 1.5 = 0.30 PDFs/case
+### Uniform vs Scenario Comparison
 
-### Scenario vs Uniform Comparison
+| Metric | Uniform (all Same) | Scenario (Mixed) | Delta |
+|--------|-------------------|------------------|-------|
+| Total PDFs | 228,550 | 228,550 | 0% |
+| Processing Time | 271.4 hrs | 271.4 hrs | 0% |
 
-The application compares:
-
-1. **Uniform Distribution**: All carriers use benchmark λ (no tier adjustments)
-2. **Scenario Distribution**: Carriers use tier-adjusted λ values
-
-Delta metrics show the percentage difference:
-```python
-delta_pdfs = ((scenario_total_pdfs / uniform_total_pdfs) - 1) × 100%
-delta_time = ((scenario_total_time / uniform_total_time) - 1) × 100%
-```
+*Note: With equal tier splits (33/33/34), the total averages out. Unequal splits will show deltas.*
 
 ---
 
@@ -260,51 +444,46 @@ delta_time = ((scenario_total_time / uniform_total_time) - 1) × 100%
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                    BENCHMARK METRICS                            │
-│  λ = 0.20 PDFs/case  |  p_scanned = 15.2%  |  p_machine = 84.8% │
+│  λ = 0.2003 PDFs/case  |  Scanned = 15.23%  |  Machine = 84.77% │
 └─────────────────────────────────────────────────────────────────┘
                               │
               ┌───────────────┴───────────────┐
               ▼                               ▼
 ┌─────────────────────────┐     ┌─────────────────────────┐
 │   UNIFORM DISTRIBUTION  │     │  SCENARIO DISTRIBUTION  │
-│   (all carriers same)   │     │  (tier multipliers)     │
+│   (all carriers same λ) │     │  (tier-adjusted λ)      │
 └─────────────────────────┘     └─────────────────────────┘
               │                               │
               ▼                               ▼
 ┌─────────────────────────┐     ┌─────────────────────────┐
 │  MONTE CARLO SIMULATION │     │  MONTE CARLO SIMULATION │
-│  - Poisson (total PDFs) │     │  - Adjusted λ per tier  │
-│  - Binomial (scanned)   │     │  - Poisson & Binomial   │
+│  1,000 iterations each  │     │  1,000 iterations each  │
 └─────────────────────────┘     └─────────────────────────┘
               │                               │
               ▼                               ▼
 ┌─────────────────────────┐     ┌─────────────────────────┐
-│   PERCENTILE STATS      │     │   PERCENTILE STATS      │
-│   P10, P50, P90         │     │   P10, P50, P90         │
-└─────────────────────────┘     └─────────────────────────┘
-              │                               │
-              ▼                               ▼
-┌─────────────────────────┐     ┌─────────────────────────┐
-│   PROCESSING TIMES      │     │   PROCESSING TIMES      │
-│   Machine + Scanned     │     │   Machine + Scanned     │
+│   FOR EACH CARRIER:     │     │   FOR EACH CARRIER:     │
+│   Total PDFs (Poisson)  │     │   Total PDFs (Poisson)  │
+│   Scanned/Machine split │     │   with tier multiplier  │
+│   Processing time calc  │     │   Processing time calc  │
 └─────────────────────────┘     └─────────────────────────┘
               │                               │
               └───────────────┬───────────────┘
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                    OUTPUT TABLES & CHARTS                       │
-│  - PDF Statistics (Min/Max/Avg)                                 │
+│  - PDF Statistics (Min/Max/Avg per bucket)                      │
 │  - Processing Time Statistics                                   │
-│  - Carrier Distribution by Bucket                               │
-│  - Scenario vs Uniform Comparison                               │
+│  - Carrier Distribution charts                                  │
+│  - Scenario vs Uniform comparison                               │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Bucket Definitions
+## Reference Tables
 
-Case ranges used for grouping carriers:
+### Bucket Definitions
 
 | Bucket | Min Cases | Max Cases |
 |--------|-----------|-----------|
@@ -321,9 +500,7 @@ Case ranges used for grouping carriers:
 | 11 | 50,001 | 100,000 |
 | 12 | 100,001 | ∞ |
 
----
-
-## Default Values
+### Default Values
 
 | Parameter | Default Value | Description |
 |-----------|---------------|-------------|
@@ -333,29 +510,54 @@ Case ranges used for grouping carriers:
 | Carrier A Scanned PDFs | 30 | Scanned PDFs (OCR required) |
 | Avg Machine Processing Time | 1.45 seconds | Per machine-readable PDF |
 | Avg Scanned Processing Time | 20.0 seconds | Per scanned PDF |
-| Single Carrier Simulations | 5,000 | Monte Carlo iterations |
-| Multi-Carrier Simulations | 1,000 | Monte Carlo iterations per carrier |
-| Random Seed | 42 | For reproducibility |
+| Monte Carlo Simulations | 1,000 | Per carrier (multi-carrier mode) |
+
+### Quick Reference: Time Conversion
+
+| Seconds | Minutes | Hours | Days |
+|---------|---------|-------|------|
+| 60 | 1 | 0.017 | 0.0007 |
+| 3,600 | 60 | 1 | 0.042 |
+| 86,400 | 1,440 | 24 | 1 |
+
+### Quick Reference: Processing Time by Case Count
+
+| Cases | Est. PDFs | Est. Time |
+|-------|-----------|-----------|
+| 10 | 2 | 9 sec |
+| 50 | 10 | 43 sec |
+| 100 | 20 | 1.4 min |
+| 500 | 100 | 7.1 min |
+| 1,000 | 200 | 14.3 min |
+| 5,000 | 1,001 | 1.2 hrs |
+| 10,000 | 2,003 | 2.4 hrs |
+| 50,000 | 10,015 | 11.9 hrs |
+| 100,000 | 20,030 | 23.8 hrs |
 
 ---
 
-## Time Format Conversion
+## Explaining to Leadership
 
-The `format_time_hours()` function converts seconds to human-readable format:
+### The Simple Story
 
-```python
-def format_time_hours(seconds):
-    hours = seconds / 3600
-    if hours < 1:
-        minutes = seconds / 60
-        return f"{minutes:.1f} min"
-    return f"{hours:.2f} hrs"
-```
+1. **We have benchmark data** from Carrier A showing 0.2 PDFs per case
+2. **We apply this ratio** to estimate PDFs for any carrier based on case count
+3. **Processing time** = (Machine PDFs × 1.45 sec) + (Scanned PDFs × 20 sec)
+4. **Monte Carlo simulation** gives us confidence ranges (P10-P90), not just single estimates
 
-**Examples:**
-- 120 seconds → "2.0 min"
-- 3600 seconds → "1.00 hrs"
-- 7200 seconds → "2.00 hrs"
+### Key Takeaways
+
+- **Each case ≈ 0.86 seconds** of processing time (with default benchmark)
+- **Scanned PDFs are 14x slower** than machine-readable (20 sec vs 1.45 sec)
+- **15% of PDFs are scanned**, but they account for **71% of processing time**
+- **The full dataset (1.1M cases)** requires approximately **271 hours** (11.3 days continuous)
+
+### Why This Matters
+
+The tool helps with:
+- **Capacity planning**: Know how long carrier processing will take
+- **Resource allocation**: Identify which buckets need the most attention
+- **What-if analysis**: Model scenarios where some carriers have higher/lower PDF ratios
 
 ---
 
@@ -364,6 +566,7 @@ def format_time_hours(seconds):
 | Version | Date | Changes |
 |---------|------|---------|
 | 1.0.0 | January 2026 | Initial release |
+| 1.1.0 | January 2026 | Added comprehensive formulas, Excel reference, real data examples |
 
 ---
 
