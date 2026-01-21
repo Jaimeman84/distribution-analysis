@@ -971,6 +971,42 @@ def main():
             pdf_stats_df = pd.DataFrame(pdf_stats_data)
             st.dataframe(pdf_stats_df, hide_index=True, use_container_width=True)
 
+            # Create grouped bar chart for Min/Max/Avg PDFs
+            fig = go.Figure()
+            fig.add_trace(go.Bar(
+                name='Min PDFs',
+                x=pdf_stats_df['Case Range'],
+                y=[int(x) for x in pdf_stats_df['Min PDFs']],
+                marker_color='#3498db'
+            ))
+            fig.add_trace(go.Bar(
+                name='Avg PDFs',
+                x=pdf_stats_df['Case Range'],
+                y=[int(x) for x in pdf_stats_df['Avg PDFs']],
+                marker_color='#2ecc71'
+            ))
+            fig.add_trace(go.Bar(
+                name='Max PDFs',
+                x=pdf_stats_df['Case Range'],
+                y=[int(x) for x in pdf_stats_df['Max PDFs']],
+                marker_color='#e74c3c'
+            ))
+            fig.update_layout(
+                barmode='group',
+                xaxis_title="Case Range",
+                yaxis_title="Number of PDFs",
+                height=350,
+                margin=dict(t=20, b=40, l=40, r=20),
+                legend=dict(
+                    orientation="h",
+                    yanchor="bottom",
+                    y=1.02,
+                    xanchor="right",
+                    x=1
+                )
+            )
+            st.plotly_chart(fig, use_container_width=True)
+
         # Create carrier distribution bar chart
         if len(bucket_summary_df) > 0:
             st.markdown("**Carrier Distribution by Case Bucket**")
@@ -1225,6 +1261,42 @@ def main():
                     st.markdown("**PDF Statistics by Case Bucket (Scenario)**")
                     scenario_pdf_stats_df = pd.DataFrame(scenario_pdf_stats_data)
                     st.dataframe(scenario_pdf_stats_df, hide_index=True, use_container_width=True)
+
+                    # Create grouped bar chart for Min/Max/Avg PDFs (Scenario)
+                    fig = go.Figure()
+                    fig.add_trace(go.Bar(
+                        name='Min PDFs',
+                        x=scenario_pdf_stats_df['Case Range'],
+                        y=[int(x) for x in scenario_pdf_stats_df['Min PDFs']],
+                        marker_color='#3498db'
+                    ))
+                    fig.add_trace(go.Bar(
+                        name='Avg PDFs',
+                        x=scenario_pdf_stats_df['Case Range'],
+                        y=[int(x) for x in scenario_pdf_stats_df['Avg PDFs']],
+                        marker_color='#2ecc71'
+                    ))
+                    fig.add_trace(go.Bar(
+                        name='Max PDFs',
+                        x=scenario_pdf_stats_df['Case Range'],
+                        y=[int(x) for x in scenario_pdf_stats_df['Max PDFs']],
+                        marker_color='#e74c3c'
+                    ))
+                    fig.update_layout(
+                        barmode='group',
+                        xaxis_title="Case Range",
+                        yaxis_title="Number of PDFs",
+                        height=350,
+                        margin=dict(t=20, b=40, l=40, r=20),
+                        legend=dict(
+                            orientation="h",
+                            yanchor="bottom",
+                            y=1.02,
+                            xanchor="right",
+                            x=1
+                        )
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
 
                 # Create stacked bar chart showing carrier distribution by tier
                 if len(scenario_bucket_df) > 0:
