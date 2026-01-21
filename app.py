@@ -948,6 +948,29 @@ def main():
 
         bucket_summary_df = pd.DataFrame(bucket_data)
 
+        # Create PDF statistics table (Min/Max/Avg)
+        pdf_stats_data = []
+        for min_val, max_val in buckets:
+            if max_val == float('inf'):
+                bucket_carriers = results_df[results_df['_cases'] >= min_val]
+            else:
+                bucket_carriers = results_df[(results_df['_cases'] >= min_val) & (results_df['_cases'] <= max_val)]
+
+            if len(bucket_carriers) > 0:
+                total_pdfs_p50 = bucket_carriers['_total_pdfs_p50']
+                pdf_stats_data.append({
+                    "Case Range": create_bucket_label(min_val, max_val),
+                    "Carriers": len(bucket_carriers),
+                    "Min PDFs": f"{total_pdfs_p50.min():.0f}",
+                    "Max PDFs": f"{total_pdfs_p50.max():.0f}",
+                    "Avg PDFs": f"{total_pdfs_p50.mean():.0f}"
+                })
+
+        if pdf_stats_data:
+            st.markdown("**PDF Statistics by Case Bucket**")
+            pdf_stats_df = pd.DataFrame(pdf_stats_data)
+            st.dataframe(pdf_stats_df, hide_index=True, use_container_width=True)
+
         # Create carrier distribution bar chart
         if len(bucket_summary_df) > 0:
             st.markdown("**Carrier Distribution by Case Bucket**")
@@ -1179,6 +1202,29 @@ def main():
                         })
 
                 scenario_bucket_df = pd.DataFrame(scenario_bucket_data)
+
+                # Create PDF statistics table (Min/Max/Avg) for scenario
+                scenario_pdf_stats_data = []
+                for min_val, max_val in buckets:
+                    if max_val == float('inf'):
+                        bucket_carriers = scenario_results_df[scenario_results_df['_cases'] >= min_val]
+                    else:
+                        bucket_carriers = scenario_results_df[(scenario_results_df['_cases'] >= min_val) & (scenario_results_df['_cases'] <= max_val)]
+
+                    if len(bucket_carriers) > 0:
+                        total_pdfs_p50 = bucket_carriers['_total_pdfs_p50']
+                        scenario_pdf_stats_data.append({
+                            "Case Range": create_bucket_label(min_val, max_val),
+                            "Carriers": len(bucket_carriers),
+                            "Min PDFs": f"{total_pdfs_p50.min():.0f}",
+                            "Max PDFs": f"{total_pdfs_p50.max():.0f}",
+                            "Avg PDFs": f"{total_pdfs_p50.mean():.0f}"
+                        })
+
+                if scenario_pdf_stats_data:
+                    st.markdown("**PDF Statistics by Case Bucket (Scenario)**")
+                    scenario_pdf_stats_df = pd.DataFrame(scenario_pdf_stats_data)
+                    st.dataframe(scenario_pdf_stats_df, hide_index=True, use_container_width=True)
 
                 # Create stacked bar chart showing carrier distribution by tier
                 if len(scenario_bucket_df) > 0:
